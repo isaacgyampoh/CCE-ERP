@@ -7,9 +7,12 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
+    { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store" }] }
+  ],
+  "crons": [
     {
-      "source": "/api/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+      "path": "/api/cohorts/send-reminder?cron=true",
+      "schedule": "0 8 * * *"
     }
   ]
 }

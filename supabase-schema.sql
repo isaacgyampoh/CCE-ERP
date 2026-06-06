@@ -342,3 +342,146 @@ CREATE INDEX IF NOT EXISTS idx_registrations_marketer ON registrations(marketer_
 CREATE INDEX IF NOT EXISTS idx_registrations_status   ON registrations(status);
 CREATE INDEX IF NOT EXISTS idx_admission_letters_lead ON admission_letters(lead_id);
 CREATE INDEX IF NOT EXISTS idx_school_fee_reg         ON school_fee_invoices(registration_id);
+
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PHASE 3 — Cohorts, Attendance, Receipts, SMS, Instructors
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- Cohorts (one per course at a time)
+CREATE TABLE IF NOT EXISTS cohorts (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  course_id       UUID REFERENCES courses(id) ON DELETE SET NULL,
+  course_name     TEXT NOT NULL,
+  cohort_number   INT DEFAULT 1,
+  label           TEXT DEFAULT '',          -- e.g. "Cohort 3 — Project Management"
+  mode            TEXT DEFAULT 'in-person', -- in-person | online | hybrid
+  start_date      DATE NOT NULL,
+  end_date        DATE,
+  class_day       TEXT DEFAULT 'Saturday',  -- day of week
+  class_time      TEXT DEFAULT '09:00',
+  location        TEXT DEFAULT '',          -- physical address or Zoom link
+  max_students    INT DEFAULT 30,
+  instructor_id   UUID REFERENCES staff(id),
+  status          TEXT DEFAULT 'upcoming',  -- upcoming | active | completed | cancelled
+  notes           TEXT DEFAULT '',
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE cohorts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all cohorts" ON cohorts FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_cohorts_course  ON cohorts(course_id);
+CREATE INDEX IF NOT EXISTS idx_cohorts_status  ON cohorts(status);
+
+-- Cohort Enrolments — links registered students to a cohort
+CREATE TABLE IF NOT EXISTS enrolments (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  cohort_id       UUID REFERENCES cohorts(id) ON DELETE CASCADE,
+  registration_id UUID REFERENCES registrations(id) ON DELETE CASCADE,
+  lead_id         UUID REFERENCES leads(id) ON DELETE SET NULL,
+  student_name    TEXT NOT NULL,
+  student_phone   TEXT DEFAULT '',
+  student_email   TEXT DEFAULT '',
+  mode            TEXT DEFAULT 'in-person', -- in-person | online
+  rsvp_status     TEXT DEFAULT 'pending',   -- pending | confirmed | declined | no_response
+  rsvp_token      TEXT DEFAULT '',          -- unique token for RSVP link
+  rsvp_responded_at TIMESTAMPTZ,
+  reminder_1month_sent  BOOLEAN DEFAULT false,
+  reminder_1week_sent   BOOLEAN DEFAULT false,
+  reminder_2day_sent    BOOLEAN DEFAULT false,
+  reminder_1day_sent    BOOLEAN DEFAULT false,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE enrolments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all enrolments" ON enrolments FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_enrolments_cohort ON enrolments(cohort_id);
+CREATE INDEX IF NOT EXISTS idx_enrolments_lead   ON enrolments(lead_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_enrolments_unique ON enrolments(cohort_id, lead_id);
+
+-- Class Sessions (each Saturday = one session)
+CREATE TABLE IF NOT EXISTS class_sessions (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  cohort_id       UUID REFERENCES cohorts(id) ON DELETE CASCADE,
+  session_number  INT DEFAULT 1,
+  session_date    DATE NOT NULL,
+  class_code_inperson TEXT DEFAULT '',  -- 6-char code shown on board for in-person
+  class_code_online   TEXT DEFAULT '',  -- 6-char code shown on screen for online
+  attendance_open     BOOLEAN DEFAULT false,
+  attendance_opened_at TIMESTAMPTZ,
+  attendance_closed_at TIMESTAMPTZ,
+  attendance_link_sent BOOLEAN DEFAULT false,
+  attendance_link_sent_at TIMESTAMPTZ,
+  instructor_id   UUID REFERENCES staff(id),
+  notes           TEXT DEFAULT '',
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE class_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all class_sessions" ON class_sessions FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_sessions_cohort ON class_sessions(cohort_id);
+
+-- Attendance Records
+CREATE TABLE IF NOT EXISTS attendance (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  session_id      UUID REFERENCES class_sessions(id) ON DELETE CASCADE,
+  cohort_id       UUID REFERENCES cohorts(id) ON DELETE CASCADE,
+  enrolment_id    UUID REFERENCES enrolments(id) ON DELETE SET NULL,
+  lead_id         UUID REFERENCES leads(id) ON DELETE SET NULL,
+  student_name    TEXT NOT NULL,
+  student_phone   TEXT DEFAULT '',
+  mode            TEXT DEFAULT 'in-person',  -- in-person | online
+  code_used       TEXT DEFAULT '',           -- code they typed
+  code_valid      BOOLEAN DEFAULT false,
+  checked_in_at   TIMESTAMPTZ DEFAULT now(),
+  ip_address      TEXT DEFAULT '',
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all attendance" ON attendance FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_attendance_session  ON attendance(session_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_cohort   ON attendance(cohort_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_unique ON attendance(session_id, lead_id);
+
+-- Payment Receipts log
+CREATE TABLE IF NOT EXISTS receipts (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  payment_id      UUID REFERENCES payments(id) ON DELETE SET NULL,
+  lead_id         UUID REFERENCES leads(id) ON DELETE SET NULL,
+  registration_id UUID REFERENCES registrations(id) ON DELETE SET NULL,
+  receipt_number  TEXT UNIQUE NOT NULL,
+  student_name    TEXT NOT NULL,
+  student_email   TEXT DEFAULT '',
+  student_phone   TEXT DEFAULT '',
+  amount          DECIMAL(10,2) NOT NULL,
+  payment_type    TEXT DEFAULT 'registration', -- registration | school_fee | partial
+  payment_channel TEXT DEFAULT 'paystack',
+  reference       TEXT DEFAULT '',
+  sent_via_email  BOOLEAN DEFAULT false,
+  sent_via_wa     BOOLEAN DEFAULT false,
+  sent_via_sms    BOOLEAN DEFAULT false,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all receipts" ON receipts FOR ALL USING (true);
+
+-- SMS Log
+CREATE TABLE IF NOT EXISTS sms_log (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  lead_id     UUID REFERENCES leads(id) ON DELETE SET NULL,
+  phone       TEXT NOT NULL,
+  message     TEXT NOT NULL,
+  type        TEXT DEFAULT 'reminder',  -- reminder | receipt | attendance | general
+  provider    TEXT DEFAULT 'arkesel',
+  status      TEXT DEFAULT 'sent',      -- sent | failed | delivered
+  cost        DECIMAL(6,4) DEFAULT 0,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE sms_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all sms_log" ON sms_log FOR ALL USING (true);
+
+-- Add instructor role to staff roles comment
+-- ALTER TABLE staff ... (no change needed, role column is TEXT)
+
+-- Add columns
+ALTER TABLE leads       ADD COLUMN IF NOT EXISTS cohort_id UUID REFERENCES cohorts(id);
+ALTER TABLE staff       ADD COLUMN IF NOT EXISTS instructor_for TEXT DEFAULT ''; -- course name
+ALTER TABLE courses     ADD COLUMN IF NOT EXISTS active_cohort_id UUID;

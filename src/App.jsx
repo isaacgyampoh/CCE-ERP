@@ -7,18 +7,21 @@ import Analytics from '@/pages/Analytics'
 import Finance from '@/pages/Finance'
 import Admission from '@/pages/Admission'
 import RegisterPage from '@/pages/RegisterPage'
+import CohortManager from '@/pages/CohortManager'
+import InstructorDashboard from '@/pages/InstructorDashboard'
+import AttendPage from '@/pages/AttendPage'
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
-// ─── Router: detect /register route ───────────────────────────────────────────
-const isRegisterRoute = window.location.pathname === '/register' ||
-  window.location.pathname.startsWith('/register?')
+// ─── Router ────────────────────────────────────────────────────────────────────
+const path = window.location.pathname
+const isRegisterRoute = path === '/register' || new URLSearchParams(window.location.search).get('m')
+const isAttendRoute   = path === '/attend'   || new URLSearchParams(window.location.search).get('s')
 
 // ─── App Entry ────────────────────────────────────────────────────────────────
 export default function App() {
-  if (isRegisterRoute || new URLSearchParams(window.location.search).get('m')) {
-    return <RegisterPage />
-  }
+  if (isRegisterRoute) return <RegisterPage />
+  if (isAttendRoute)   return <AttendPage />
   return <ERP />
 }
 
@@ -196,6 +199,8 @@ function ERP() {
     { id: 'analytics', label: 'Analytics', icon: Icon.analytics, roles: 'all' },
     { id: 'finance', label: 'Finance', icon: Icon.finance, roles: ['pm','admin','finance'] },
     { id: 'admission', label: 'Admissions', icon: Icon.admission, roles: ['pm','admin','admission'] },
+    { id: 'classes', label: 'Classes', icon: Icon.courses, roles: ['pm','admin'] },
+    { id: 'instructor', label: 'My Classes', icon: Icon.courses, roles: ['instructor'] },
     { id: 'staff', label: 'Staff', icon: Icon.staff, roles: ['pm','admin'] },
     { id: 'courses', label: 'Courses', icon: Icon.courses, roles: ['pm','admin'] },
     { id: 'integrations', label: 'Integrations', icon: Icon.integrations, roles: ['pm','admin'] },
@@ -299,6 +304,8 @@ function ERP() {
               {page === 'staff'        && isPM && <StaffManager staff={staff} sb={sb} onRefresh={() => loadAll(user)}/>}
               {page === 'courses'      && isPM && <CourseManager courses={courses} sb={sb} onRefresh={() => loadAll(user)}/>}
               {page === 'integrations' && isPM && <Integrations sb={sb}/>}
+              {page === 'classes'      && isPM && <CohortManager sb={sb} staff={staff} courses={courses} user={user}/>}
+              {page === 'instructor'  && user?.role === 'instructor' && <InstructorDashboard sb={sb} user={user}/>}
             </>
           )}
         </main>
