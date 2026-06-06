@@ -1,0 +1,6 @@
+@import "tailwindcss";
+* { -webkit-tap-highlight-color: transparent; }
+body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; background: #f8fafc; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.3s ease; }
+.press:active { transform: scale(0.98); }
