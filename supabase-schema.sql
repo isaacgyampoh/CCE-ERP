@@ -173,3 +173,172 @@ INSERT INTO courses (name, description, mode, duration, fee, scholarship_availab
   ('Business Administration Diploma', 'Comprehensive business management', 'in-person', '6 months', 4500, true),
   ('Human Resource Management', 'HR fundamentals and best practices', 'hybrid', '3 months', 2000, false)
 ON CONFLICT DO NOTHING;
+
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PHASE 2 — Registration, Admissions, Payments, School Fees
+-- Run in Supabase SQL Editor AFTER the base schema
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- Full registration form submissions (from the public reg link)
+CREATE TABLE IF NOT EXISTS registrations (
+  id                  UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  lead_id             UUID REFERENCES leads(id) ON DELETE CASCADE,
+  marketer_id         UUID REFERENCES staff(id),
+  marketer_name       TEXT DEFAULT '',
+  -- Personal info
+  full_name           TEXT NOT NULL,
+  phone               TEXT DEFAULT '',
+  email               TEXT DEFAULT '',
+  dob                 DATE,
+  gender              TEXT DEFAULT '',
+  address             TEXT DEFAULT '',
+  city                TEXT DEFAULT '',
+  nationality         TEXT DEFAULT 'Ghanaian',
+  -- Course info
+  course_interest     TEXT DEFAULT '',
+  mode_preference     TEXT DEFAULT '',
+  scholarship_interest BOOLEAN DEFAULT false,
+  education_level     TEXT DEFAULT '',
+  employment_status   TEXT DEFAULT '',
+  how_heard           TEXT DEFAULT '',
+  goals               TEXT DEFAULT '',
+  -- Emergency contact
+  emergency_name      TEXT DEFAULT '',
+  emergency_phone     TEXT DEFAULT '',
+  emergency_relation  TEXT DEFAULT '',
+  -- Payment
+  paystack_ref        TEXT DEFAULT '',
+  amount_paid         DECIMAL(10,2) DEFAULT 0,
+  paid_at             TIMESTAMPTZ,
+  status              TEXT DEFAULT 'pending', -- pending | paid | refunded
+  -- Admission tracking
+  admission_letter_sent       BOOLEAN DEFAULT false,
+  admission_letter_sent_at    TIMESTAMPTZ,
+  admission_letter_email_sent BOOLEAN DEFAULT false,
+  admission_letter_wa_sent    BOOLEAN DEFAULT false,
+  -- School fees tracking
+  school_fee_amount   DECIMAL(10,2) DEFAULT 0,
+  school_fee_paid     DECIMAL(10,2) DEFAULT 0,
+  school_fee_status   TEXT DEFAULT 'pending', -- pending | partial | paid
+  school_fee_due_date DATE,
+  created_at          TIMESTAMPTZ DEFAULT now(),
+  updated_at          TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE registrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all registrations" ON registrations FOR ALL USING (true);
+
+-- Payments table (registration fees + school fees)
+CREATE TABLE IF NOT EXISTS payments (
+  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  lead_id       UUID REFERENCES leads(id) ON DELETE SET NULL,
+  registration_id UUID REFERENCES registrations(id) ON DELETE SET NULL,
+  marketer_id   UUID REFERENCES staff(id),
+  payment_type  TEXT DEFAULT 'registration', -- registration | school_fee | partial
+  amount        DECIMAL(10,2) NOT NULL,
+  reference     TEXT UNIQUE NOT NULL,
+  channel       TEXT DEFAULT 'paystack',     -- paystack | bank_transfer | cash | momo
+  status        TEXT DEFAULT 'pending',       -- pending | success | failed | refunded
+  paid_at       TIMESTAMPTZ DEFAULT now(),
+  notes         TEXT DEFAULT '',
+  recorded_by   UUID REFERENCES staff(id),  -- for manual entries by finance
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all payments" ON payments FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_payments_lead ON payments(lead_id);
+CREATE INDEX IF NOT EXISTS idx_payments_marketer ON payments(marketer_id);
+CREATE INDEX IF NOT EXISTS idx_payments_type ON payments(payment_type);
+
+-- School fee payment plans / invoices
+CREATE TABLE IF NOT EXISTS school_fee_invoices (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  registration_id UUID REFERENCES registrations(id) ON DELETE CASCADE,
+  lead_id         UUID REFERENCES leads(id) ON DELETE SET NULL,
+  student_name    TEXT DEFAULT '',
+  course          TEXT DEFAULT '',
+  total_fee       DECIMAL(10,2) DEFAULT 0,
+  amount_paid     DECIMAL(10,2) DEFAULT 0,
+  balance         DECIMAL(10,2) DEFAULT 0,
+  due_date        DATE,
+  status          TEXT DEFAULT 'pending', -- pending | partial | paid | overdue
+  paystack_link   TEXT DEFAULT '',        -- pre-generated payment link
+  notes           TEXT DEFAULT '',
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE school_fee_invoices ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all school_fee_invoices" ON school_fee_invoices FOR ALL USING (true);
+
+-- Admission letters log
+CREATE TABLE IF NOT EXISTS admission_letters (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  registration_id UUID REFERENCES registrations(id) ON DELETE CASCADE,
+  lead_id         UUID REFERENCES leads(id) ON DELETE SET NULL,
+  student_name    TEXT DEFAULT '',
+  student_email   TEXT DEFAULT '',
+  student_phone   TEXT DEFAULT '',
+  course          TEXT DEFAULT '',
+  mode            TEXT DEFAULT '',
+  marketer_name   TEXT DEFAULT '',
+  sent_via_email  BOOLEAN DEFAULT false,
+  sent_via_wa     BOOLEAN DEFAULT false,
+  sent_by         UUID REFERENCES staff(id),
+  sent_at         TIMESTAMPTZ DEFAULT now(),
+  letter_content  TEXT DEFAULT '',
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE admission_letters ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all admission_letters" ON admission_letters FOR ALL USING (true);
+
+-- Email send log
+CREATE TABLE IF NOT EXISTS email_log (
+  id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  to_email    TEXT NOT NULL,
+  to_name     TEXT DEFAULT '',
+  subject     TEXT NOT NULL,
+  body        TEXT DEFAULT '',
+  type        TEXT DEFAULT 'admission', -- admission | reg_confirm | school_fee | general
+  lead_id     UUID REFERENCES leads(id) ON DELETE SET NULL,
+  status      TEXT DEFAULT 'sent',      -- sent | failed | bounced
+  provider    TEXT DEFAULT 'sendgrid',
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE email_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all email_log" ON email_log FOR ALL USING (true);
+
+-- Google Ads config (for future webhook capture)
+CREATE TABLE IF NOT EXISTS google_ads_config (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  customer_id     TEXT DEFAULT '',
+  developer_token TEXT DEFAULT '',
+  webhook_secret  TEXT DEFAULT 'cce_gads_2026',
+  is_active       BOOLEAN DEFAULT false,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE google_ads_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all google_ads_config" ON google_ads_config FOR ALL USING (true);
+
+-- Additional columns on leads
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS reg_fee_paid     DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS reg_paid_at      TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS registration_id  UUID REFERENCES registrations(id);
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS docs_sent        BOOLEAN DEFAULT false;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS docs_sent_at     TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS admission_sent   BOOLEAN DEFAULT false;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS admission_sent_at TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS school_fee_status TEXT DEFAULT 'pending';
+
+-- Additional columns on courses
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS reg_fee        DECIMAL(10,2) DEFAULT 150;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS start_date     DATE;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS next_cohort    DATE;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS max_students   INT DEFAULT 30;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS syllabus_url   TEXT DEFAULT '';
+
+-- Indexes for new tables
+CREATE INDEX IF NOT EXISTS idx_registrations_lead     ON registrations(lead_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_marketer ON registrations(marketer_id);
+CREATE INDEX IF NOT EXISTS idx_registrations_status   ON registrations(status);
+CREATE INDEX IF NOT EXISTS idx_admission_letters_lead ON admission_letters(lead_id);
+CREATE INDEX IF NOT EXISTS idx_school_fee_reg         ON school_fee_invoices(registration_id);
