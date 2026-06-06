@@ -134,3 +134,42 @@ CREATE INDEX idx_notifications_unread ON notifications(staff_id, is_read);
 
 -- Insert default PM
 INSERT INTO staff (name, email, role) VALUES ('Project Manager', 'pm@cce.edu.gh', 'pm');
+
+
+-- ══════════════════════════════════════════════════════════
+-- ADDITIONS — Run these if updating an existing deployment
+-- ══════════════════════════════════════════════════════════
+
+-- LinkedIn Config (mirrors fb_config pattern)
+CREATE TABLE IF NOT EXISTS linkedin_config (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id TEXT DEFAULT '',
+  client_secret TEXT DEFAULT '',
+  access_token TEXT DEFAULT '',
+  organization_id TEXT DEFAULT '',
+  form_ids TEXT[] DEFAULT '{}',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE linkedin_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all linkedin_config" ON linkedin_config FOR ALL USING (true);
+
+-- Add city to leads if not exists
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS city TEXT DEFAULT '';
+
+-- Seed sample staff for demo
+INSERT INTO staff (name, email, phone, role) VALUES
+  ('Abena Mensah', 'abena@cce.edu.gh', '0244000001', 'marketer'),
+  ('Kofi Boateng', 'kofi@cce.edu.gh', '0244000002', 'marketer'),
+  ('Finance Officer', 'finance@cce.edu.gh', '0244000003', 'finance'),
+  ('Admissions', 'admissions@cce.edu.gh', '0244000004', 'admission')
+ON CONFLICT (email) DO NOTHING;
+
+-- Seed sample courses
+INSERT INTO courses (name, description, mode, duration, fee, scholarship_available) VALUES
+  ('Professional Certificate in Project Management', 'PMI-aligned project management course', 'in-person', '3 months', 2500, true),
+  ('Data Analysis with Excel & Python', 'Practical data skills for business', 'hybrid', '2 months', 1800, false),
+  ('Digital Marketing Masterclass', 'SEO, social media, paid ads', 'online', '6 weeks', 1200, true),
+  ('Business Administration Diploma', 'Comprehensive business management', 'in-person', '6 months', 4500, true),
+  ('Human Resource Management', 'HR fundamentals and best practices', 'hybrid', '3 months', 2000, false)
+ON CONFLICT DO NOTHING;
