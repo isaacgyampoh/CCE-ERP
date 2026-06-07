@@ -1,42 +1,33 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import { SUPABASE_URL, SUPABASE_ANON, STATUS, SOURCES, ROLES, WA_ASSIGN_MSG, WA_REG_MSG } from '@/lib/constants'
+import { formatPhone, timeAgo, fmtCurrency, fmtDate, marketerRegLink, sendSMS } from '@/lib/helpers'
+import { Avatar, Badge, Modal, StatCard, EmptyState, Spinner, Label, ProgressBar, Icon } from '@/components/ui'
+import Analytics from '@/pages/Analytics'
+import Finance from '@/pages/Finance'
+import Admission from '@/pages/Admission'
+import RegisterPage from '@/pages/RegisterPage'
+import CohortManager from '@/pages/CohortManager'
+import InstructorDashboard from '@/pages/InstructorDashboard'
+import AttendPage from '@/pages/AttendPage'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://PLACEHOLDER.supabase.co'
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
-// Arkesel SMS
-const ARKESEL_KEY = 'VXliSENVQnpsYkhWYlNpZkNRZEc'
-const SMS_SENDER = 'Cambridge'
+// ─── Router ────────────────────────────────────────────────────────────────────
+const path = window.location.pathname
+const isRegisterRoute = path === '/register' || new URLSearchParams(window.location.search).get('m')
+const isAttendRoute   = path === '/attend'   || new URLSearchParams(window.location.search).get('s')
 
-async function sendSMS(phone, message) {
-  if (!phone) return
-  const recipient = phone.replace(/\s+/g, '').replace(/^0/, '233')
-  try {
-    await fetch('https://sms.arkesel.com/api/v2/sms/send', {
-      method: 'POST',
-      headers: { 'api-key': ARKESEL_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender: SMS_SENDER, message, recipients: [recipient] }),
-    })
-  } catch (e) { console.error('SMS error:', e) }
-}
-
-const STATUS_LABELS = {
-  new: 'New', assigned: 'Assigned', contacted: 'Contacted', follow_up: 'Follow Up',
-  pending_registration: 'Pending Registration', registered: 'Registered',
-  next_session: 'Next Session', not_qualified: 'Not Qualified', inquiry: 'Inquiry',
-}
-const STATUS_COLORS = {
-  new: 'bg-blue-100 text-blue-700', assigned: 'bg-purple-100 text-purple-700',
-  contacted: 'bg-cyan-100 text-cyan-700', follow_up: 'bg-amber-100 text-amber-700',
-  pending_registration: 'bg-orange-100 text-orange-700', registered: 'bg-green-100 text-green-700',
-  next_session: 'bg-indigo-100 text-indigo-700', not_qualified: 'bg-red-100 text-red-700',
-  inquiry: 'bg-gray-100 text-gray-600',
-}
-const SOURCES = ['facebook', 'linkedin', 'website', 'manual', 'referral', 'walk-in']
-
+// ─── App Entry ────────────────────────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null) // logged-in staff
+  if (isRegisterRoute) return <RegisterPage />
+  if (isAttendRoute)   return <AttendPage />
+  return <ERP />
+}
+
+// ─── Main ERP ─────────────────────────────────────────────────────────────────
+function ERP() {
+  const [user, setUser] = useState(null)
   const [staff, setStaff] = useState([])
   const [page, setPage] = useState('dashboard')
   const [leads, setLeads] = useState([])
@@ -45,29 +36,27 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [selectedLead, setSelectedLead] = useState(null)
   const [showNotifs, setShowNotifs] = useState(false)
-
-  // Filters
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [searchQ, setSearchQ] = useState('')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
     const saved = sessionStorage.getItem('cce_user')
-    if (saved) { setUser(JSON.parse(saved)); loadAll(JSON.parse(saved)) }
-    else { loadStaff() }
+    if (saved) { const u = JSON.parse(saved); setUser(u); loadAll(u) }
+    else loadStaff()
   }, [])
 
-  async function loadStaff() {
+  const loadStaff = async () => {
     const { data } = await sb.from('staff').select('*').eq('is_active', true).order('name')
     setStaff(data || [])
     setLoading(false)
   }
 
-  async function loadAll(u) {
+  const loadAll = async (u) => {
+    setLoading(true)
     const [{ data: l }, { data: s }, { data: c }, { data: n }] = await Promise.all([
-      sb.from('leads').select('*, staff:assigned_to(name)').order('created_at', { ascending: false }),
+      sb.from('leads').select('*, assignee:assigned_to(id,name,role,phone)').order('created_at', { ascending: false }),
       sb.from('staff').select('*').eq('is_active', true).order('name'),
       sb.from('courses').select('*').order('name'),
-      sb.from('notifications').select('*').eq('staff_id', u.id).order('created_at', { ascending: false }).limit(20),
+      sb.from('notifications').select('*').eq('staff_id', u.id).order('created_at', { ascending: false }).limit(40),
     ])
     setLeads(l || [])
     setStaff(s || [])
@@ -76,618 +65,1051 @@ export default function App() {
     setLoading(false)
   }
 
-  function login(s) {
-    setUser(s)
-    sessionStorage.setItem('cce_user', JSON.stringify(s))
-    setLoading(true)
-    loadAll(s)
-  }
-
-  function logout() {
-    setUser(null)
-    sessionStorage.removeItem('cce_user')
-    setPage('dashboard')
-    loadStaff()
-  }
+  const login = (s) => { setUser(s); sessionStorage.setItem('cce_user', JSON.stringify(s)); loadAll(s) }
+  const logout = () => { setUser(null); sessionStorage.removeItem('cce_user'); setPage('dashboard'); setSelectedLead(null); loadStaff() }
 
   const isPM = user?.role === 'pm' || user?.role === 'admin'
+  const isFinance = user?.role === 'finance'
+  const isAdmission = user?.role === 'admission'
+  const isMarketer = user?.role === 'marketer'
   const myLeads = isPM ? leads : leads.filter(l => l.assigned_to === user?.id)
-  const unreadNotifs = notifications.filter(n => !n.is_read).length
+  const unread = notifications.filter(n => !n.is_read).length
 
-  const filteredLeads = (isPM ? leads : myLeads).filter(l => {
-    if (statusFilter !== 'all' && l.status !== statusFilter) return false
-    if (searchQ) {
-      const q = searchQ.toLowerCase()
-      return l.name?.toLowerCase().includes(q) || l.phone?.includes(q) || l.email?.toLowerCase().includes(q)
-    }
-    return true
-  })
-
-  // ═══ ASSIGN LEAD ═══
-  async function assignLead(leadId, marketerId) {
+  // ── Actions ─────────────────────────────────────────────────────────────
+  const assignLead = async (leadId, marketerId) => {
     const marketer = staff.find(s => s.id === marketerId)
-    if (!marketer) return
-
-    await sb.from('leads').update({
-      assigned_to: marketerId,
-      assigned_at: new Date().toISOString(),
-      status: 'assigned',
-      updated_at: new Date().toISOString(),
-    }).eq('id', leadId)
-
-    // Notify marketer
     const lead = leads.find(l => l.id === leadId)
-    await sb.from('notifications').insert({
-      staff_id: marketerId,
-      title: 'New Lead Assigned',
-      message: `${lead?.name || 'A lead'} has been assigned to you by ${user.name}`,
-      type: 'assignment',
-      lead_id: leadId,
-    })
+    if (!marketer || !lead) return
 
-    // Log comment
-    await sb.from('lead_comments').insert({
-      lead_id: leadId,
-      staff_id: user.id,
-      staff_name: user.name,
-      comment: `Lead assigned to ${marketer.name}`,
-      status_change: 'assigned',
-    })
+    await sb.from('leads').update({ assigned_to: marketerId, assigned_at: new Date().toISOString(), status: 'assigned', updated_at: new Date().toISOString() }).eq('id', leadId)
+    await sb.from('notifications').insert({ staff_id: marketerId, title: 'New Lead Assigned', message: `${lead.name} assigned to you by ${user.name}`, type: 'assignment', lead_id: leadId })
+    await sb.from('lead_comments').insert({ lead_id: leadId, staff_id: user.id, staff_name: user.name, comment: `Assigned to ${marketer.name}`, status_change: 'assigned' })
 
-    // Send SMS to lead (personalized with marketer name)
-    if (lead?.phone) {
-      const firstName = (lead.name || '').split(' ')[0]
-      const smsMsg = `Hi ${firstName}, thank you for your interest in Cambridge Center of Excellence!\n\nWe offer world-class professional courses (Online & In-Person) with scholarship opportunities.\n\n${marketer.name} from our team will be reaching out to you shortly to discuss the best options for you.\n\nCambridge Center of Excellence\nwww.cce.edu.gh`
-      await sendSMS(lead.phone, smsMsg)
+    const phone = formatPhone(lead.phone)
+    if (phone) {
+      // Auto-send SMS via Arkesel
+      const smsMsg = `Hello ${lead.name.split(' ')[0]}! Thank you for your interest in Cambridge Center of Excellence.\n\n${marketer.name} from our admissions team will be reaching out to you shortly to guide you through your enrollment journey.\n\nWe offer world-class professional courses (Online & In-Person) with scholarship opportunities.\n\nCambridge Center of Excellence`
+      await sendSMS(phone, smsMsg)
 
-      // Log SMS
-      await sb.from('whatsapp_log').insert({
-        lead_id: leadId,
-        phone: lead.phone,
-        message: smsMsg,
-        marketer_name: marketer.name,
-        status: 'sent',
-      })
-
-      // Update lead
+      // Also open WhatsApp for detailed message
+      const msg = WA_ASSIGN_MSG(lead.name, marketer.name)
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+      await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: lead.phone, message: smsMsg, marketer_name: marketer.name, status: 'sent' })
       await sb.from('leads').update({ whatsapp_sent: true, whatsapp_sent_at: new Date().toISOString() }).eq('id', leadId)
     }
-
-    loadAll(user)
+    await loadAll(user)
   }
 
-  // ═══ UPDATE STATUS ═══
-  async function updateStatus(leadId, newStatus, comment = '') {
-    await sb.from('leads').update({
-      status: newStatus,
-      updated_at: new Date().toISOString(),
-    }).eq('id', leadId)
-
-    if (comment) {
-      await sb.from('lead_comments').insert({
-        lead_id: leadId,
-        staff_id: user.id,
-        staff_name: user.name,
-        comment,
-        status_change: newStatus,
-      })
-    }
-
-    loadAll(user)
+  const sendRegLink = async (lead) => {
+    if (!lead.assigned_to) return alert('Assign the lead to a marketer first.')
+    const link = marketerRegLink(lead.assigned_to, lead.id)
+    const marketer = staff.find(s => s.id === lead.assigned_to)
+    const phone = formatPhone(lead.phone)
+    const msg = WA_REG_MSG(lead.name, link, marketer?.name || 'CCE')
+    if (phone) window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+    // Update status to pending
+    await sb.from('leads').update({ status: 'pending_registration', updated_at: new Date().toISOString() }).eq('id', lead.id)
+    await sb.from('lead_comments').insert({ lead_id: lead.id, staff_id: user.id, staff_name: user.name, comment: `Registration link sent via WhatsApp: ${link}`, status_change: 'pending_registration' })
+    await loadAll(user)
   }
 
-  // ═══ ADD LEAD MANUALLY ═══
-  async function addLead(data) {
-    await sb.from('leads').insert({
-      ...data,
-      source: data.source || 'manual',
-      status: 'new',
-    })
+  const updateStatus = async (leadId, newStatus, comment = '') => {
+    await sb.from('leads').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', leadId)
+    if (comment) await sb.from('lead_comments').insert({ lead_id: leadId, staff_id: user.id, staff_name: user.name, comment, status_change: newStatus })
+    await loadAll(user)
+  }
 
-    // Notify PM
+  const addLead = async (data) => {
+    const { data: inserted } = await sb.from('leads').insert({ ...data, status: 'new' }).select().single()
     const pms = staff.filter(s => s.role === 'pm' || s.role === 'admin')
     for (const pm of pms) {
-      await sb.from('notifications').insert({
-        staff_id: pm.id,
-        title: 'New Lead',
-        message: `${data.name} — ${data.source || 'manual'}`,
-        type: 'new_lead',
-      })
-      // SMS to PM
-      if (pm.phone) {
-        await sendSMS(pm.phone, `New Lead! ${data.name} (${data.source || 'manual'})${data.phone ? ' — ' + data.phone : ''}. Login to CCE ERP to assign.`)
-      }
+      await sb.from('notifications').insert({ staff_id: pm.id, title: 'New Lead', message: `${data.name} via ${data.source}`, type: 'new_lead', lead_id: inserted?.id })
+      if (pm.phone) await sendSMS(pm.phone, `New Lead! ${data.name} (${data.source})${data.phone ? ' — ' + data.phone : ''}. Login to assign.`)
     }
-
-    loadAll(user)
+    await loadAll(user)
   }
 
-  async function markNotifRead(id) {
+  const addPersonalLead = async (data) => {
+    const { data: inserted } = await sb.from('leads').insert({
+      ...data, source: 'personal', status: 'assigned',
+      assigned_to: user.id, assigned_at: new Date().toISOString(),
+    }).select().single()
+    await sb.from('lead_comments').insert({ lead_id: inserted?.id, staff_id: user.id, staff_name: user.name, comment: 'Personal lead added by marketer.', status_change: 'assigned' })
+    const pms = staff.filter(s => s.role === 'pm' || s.role === 'admin')
+    for (const pm of pms) await sb.from('notifications').insert({ staff_id: pm.id, title: 'New Personal Lead', message: `${user.name} added a personal lead: ${data.name}`, type: 'new_lead', lead_id: inserted?.id })
+    await loadAll(user)
+  }
+
+  const markNotifRead = async (id) => {
     await sb.from('notifications').update({ is_read: true }).eq('id', id)
     setNotifications(n => n.map(x => x.id === id ? { ...x, is_read: true } : x))
   }
+  const markAllRead = async () => {
+    const ids = notifications.filter(n => !n.is_read).map(n => n.id)
+    if (!ids.length) return
+    await sb.from('notifications').update({ is_read: true }).in('id', ids)
+    setNotifications(n => n.map(x => ({ ...x, is_read: true })))
+  }
 
-  // ═══ LOGIN SCREEN ═══
+  const nav = (p, lead = null) => { setPage(p); setSelectedLead(lead); setSidebarOpen(false); window.scrollTo(0, 0) }
+
+  // ── Login ──────────────────────────────────────────────────────────────
   if (!user) return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-50">
-      <div className="w-full max-w-xs fade-in">
-        <div className="text-center mb-6">
-          <h1 className="text-xl font-extrabold text-slate-900">CCE ERP</h1>
-          <p className="text-xs text-slate-400 mt-1">Cambridge Center of Excellence</p>
-        </div>
-        {loading ? (
-          <div className="flex justify-center py-10"><div className="w-6 h-6 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" /></div>
-        ) : staff.length === 0 ? (
-          <p className="text-center text-sm text-slate-400 py-10">No staff found. Run the SQL schema first.</p>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-xs text-slate-500 mb-3 text-center">Select your account</p>
-            {staff.map(s => (
-              <button key={s.id} onClick={() => login(s)}
-                className="w-full flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:border-slate-400 transition press text-left">
-                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold text-slate-600">{s.name.charAt(0)}</div>
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">{s.name}</div>
-                  <div className="text-[10px] text-slate-400 uppercase">{s.role}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-6 h-6 border-2 border-slate-200 border-t-blue-600 rounded-full animate-spin" /></div>
-
-  // ═══ MAIN APP ═══
-  return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Top Nav */}
-      <nav className="bg-white border-b border-slate-200 px-4">
-        <div className="max-w-6xl mx-auto h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm font-extrabold text-slate-900">CCE ERP</h1>
-            <span className="text-[10px] text-slate-400 hidden sm:block">Cambridge Center of Excellence</span>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Notifications */}
-            <button onClick={() => setShowNotifs(!showNotifs)} className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-50 transition">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
-              {unreadNotifs > 0 && <span className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center">{unreadNotifs}</span>}
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">{user.name.charAt(0)}</div>
-              <div className="hidden sm:block">
-                <div className="text-xs font-semibold text-slate-900">{user.name}</div>
-                <div className="text-[10px] text-slate-400 uppercase">{user.role}</div>
-              </div>
+    <div className="min-h-screen flex bg-slate-50">
+      <div className="hidden md:flex flex-col justify-center w-96 bg-gradient-to-b from-blue-700 to-indigo-900 p-10 text-white flex-shrink-0">
+        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl font-black mb-6">C</div>
+        <h1 className="text-3xl font-black leading-tight">Cambridge Center<br/>of Excellence</h1>
+        <p className="text-blue-200 text-sm mt-3 leading-relaxed">Integrated CRM, Lead Pipeline, Payments & Admissions Management.</p>
+        <div className="mt-8 space-y-2.5 text-sm text-blue-200">
+          {['Role-based dashboards','Lead assignment & tracking','Unique marketer registration links','Paystack payment integration','Conversion rate analytics','Finance & Admission portals'].map(f => (
+            <div key={f} className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-white/20 rounded-full flex items-center justify-center text-[9px]">✓</div>{f}
             </div>
-            <button onClick={logout} className="text-[10px] text-slate-400 hover:text-red-500 transition">Logout</button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Tabs */}
-      <div className="bg-white border-b border-slate-200 px-4 overflow-x-auto">
-        <div className="max-w-6xl mx-auto flex gap-1 -mb-px">
-          {[
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'leads', label: `Leads (${isPM ? leads.length : myLeads.length})` },
-            ...(isPM ? [{ id: 'staff', label: 'Staff' }, { id: 'courses', label: 'Courses' }, { id: 'add', label: '+ Add Lead' }] : [{ id: 'add', label: '+ Add Lead' }]),
-          ].map(t => (
-            <button key={t.id} onClick={() => { setPage(t.id); setSelectedLead(null) }}
-              className={`px-4 py-3 text-xs font-medium border-b-2 transition whitespace-nowrap ${page === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
-              {t.label}
-            </button>
           ))}
         </div>
       </div>
-
-      {/* Notifications dropdown */}
-      {showNotifs && (
-        <div className="fixed top-14 right-4 w-80 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 max-h-[60vh] overflow-y-auto fade-in">
-          <div className="p-3 border-b border-slate-100 flex justify-between items-center">
-            <span className="text-sm font-bold text-slate-900">Notifications</span>
-            <button onClick={() => setShowNotifs(false)} className="text-xs text-slate-400">Close</button>
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-sm fade-up">
+          <div className="mb-8 md:hidden">
+            <div className="w-10 h-10 bg-blue-700 rounded-xl flex items-center justify-center text-xl font-black text-white mb-3">C</div>
+            <h1 className="text-2xl font-black text-slate-900">CCE ERP</h1>
           </div>
-          {notifications.length === 0 ? <p className="text-xs text-slate-300 text-center py-6">No notifications</p> : (
-            notifications.map(n => (
-              <div key={n.id} onClick={() => { markNotifRead(n.id); setShowNotifs(false) }}
-                className={`p-3 border-b border-slate-50 cursor-pointer hover:bg-slate-50 transition ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
-                <div className="text-xs font-semibold text-slate-800">{n.title}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">{n.message}</div>
-                <div className="text-[10px] text-slate-300 mt-1">{new Date(n.created_at).toLocaleString()}</div>
-              </div>
-            ))
+          <h2 className="text-xl font-bold text-slate-900 mb-1">Welcome back</h2>
+          <p className="text-slate-400 text-sm mb-6">Select your account to continue</p>
+          {loading ? <Spinner size={24}/> : staff.length === 0 ? (
+            <div className="card p-6 text-center"><p className="text-sm text-slate-400">No staff found. Run the SQL schema first.</p></div>
+          ) : (
+            <div className="space-y-2">
+              {staff.map(s => (
+                <button key={s.id} onClick={() => login(s)}
+                  className="w-full flex items-center gap-3 p-3.5 card hover:border-blue-300 hover:shadow-sm transition press text-left group">
+                  <Avatar name={s.name} size={38}/>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">{s.name}</div>
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">{s.role}</div>
+                  </div>
+                  <svg className="opacity-0 group-hover:opacity-100 transition text-blue-600" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              ))}
+            </div>
           )}
         </div>
-      )}
+      </div>
+    </div>
+  )
 
-      <div className="max-w-6xl mx-auto p-4">
+  // ── Nav Items per role ──────────────────────────────────────────────────
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: Icon.dashboard, roles: 'all' },
+    { id: 'leads', label: 'Leads', count: myLeads.length, icon: Icon.leads, roles: 'all' },
+    { id: 'add', label: 'Add Lead', icon: Icon.add, roles: ['pm','admin','marketer','receptionist'] },
+    { id: 'my_leads', label: 'My Leads', icon: Icon.target, roles: ['marketer'] },
+    { id: 'analytics', label: 'Analytics', icon: Icon.analytics, roles: 'all' },
+    { id: 'finance', label: 'Finance', icon: Icon.finance, roles: ['pm','admin','finance'] },
+    { id: 'admission', label: 'Admissions', icon: Icon.admission, roles: ['pm','admin','admission'] },
+    { id: 'classes', label: 'Classes', icon: Icon.courses, roles: ['pm','admin'] },
+    { id: 'instructor', label: 'My Classes', icon: Icon.courses, roles: ['instructor'] },
+    { id: 'staff', label: 'Staff', icon: Icon.staff, roles: ['pm','admin'] },
+    { id: 'courses', label: 'Courses', icon: Icon.courses, roles: ['pm','admin'] },
+    { id: 'integrations', label: 'Integrations', icon: Icon.integrations, roles: ['pm','admin'] },
+  ].filter(item => item.roles === 'all' || item.roles.includes(user?.role))
 
-        {/* ═══ DASHBOARD ═══ */}
-        {page === 'dashboard' && (
-          <div className="fade-in">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Welcome, {user.name}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-              {[
-                { label: 'Total Leads', value: isPM ? leads.length : myLeads.length, color: 'bg-blue-50 text-blue-700' },
-                { label: 'New', value: (isPM ? leads : myLeads).filter(l => l.status === 'new').length, color: 'bg-cyan-50 text-cyan-700' },
-                { label: 'Follow Up', value: (isPM ? leads : myLeads).filter(l => l.status === 'follow_up').length, color: 'bg-amber-50 text-amber-700' },
-                { label: 'Registered', value: (isPM ? leads : myLeads).filter(l => l.status === 'registered').length, color: 'bg-green-50 text-green-700' },
-                { label: 'Pending Reg.', value: (isPM ? leads : myLeads).filter(l => l.status === 'pending_registration').length, color: 'bg-orange-50 text-orange-700' },
-                { label: 'Not Qualified', value: (isPM ? leads : myLeads).filter(l => l.status === 'not_qualified').length, color: 'bg-red-50 text-red-700' },
-                { label: 'Inquiries', value: (isPM ? leads : myLeads).filter(l => l.status === 'inquiry').length, color: 'bg-gray-50 text-gray-600' },
-                { label: 'Unassigned', value: leads.filter(l => !l.assigned_to).length, color: isPM ? 'bg-purple-50 text-purple-700' : 'bg-slate-50 text-slate-400' },
-              ].map(c => (
-                <div key={c.label} className={`${c.color} rounded-xl p-4`}>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider opacity-60">{c.label}</div>
-                  <div className="text-2xl font-bold mt-1">{c.value}</div>
-                </div>
-              ))}
-            </div>
+  // ── Layout ──────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen flex">
+      {sidebarOpen && <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setSidebarOpen(false)}/>}
 
-            {/* Recent leads */}
-            <h3 className="text-sm font-bold text-slate-700 mb-2">Recent Leads</h3>
-            <div className="space-y-2">
-              {(isPM ? leads : myLeads).slice(0, 5).map(l => (
-                <div key={l.id} onClick={() => { setSelectedLead(l); setPage('leads') }}
-                  className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between cursor-pointer hover:border-slate-400 transition">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{l.name}</div>
-                    <div className="text-[11px] text-slate-400">{l.phone} · {l.source} · {l.staff?.name || 'Unassigned'}</div>
-                  </div>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_COLORS[l.status] || 'bg-slate-100 text-slate-500'}`}>{STATUS_LABELS[l.status] || l.status}</span>
-                </div>
-              ))}
-            </div>
+      {/* Sidebar */}
+      <aside className={`fixed top-0 left-0 h-full w-[220px] bg-white border-r border-slate-200 flex flex-col z-50 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+        <div className="h-14 flex items-center px-4 border-b border-slate-100">
+          <div className="w-7 h-7 bg-blue-700 rounded-lg flex items-center justify-center text-white text-xs font-black mr-2.5">C</div>
+          <div><div className="text-xs font-bold text-slate-900">CCE ERP</div><div className="text-[9px] text-slate-400">Cambridge Centre</div></div>
+        </div>
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => nav(item.id)}
+              className={`nav-item w-full ${page === item.id && !selectedLead ? 'active' : ''}`}>
+              {item.icon}
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.count != null && <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{item.count}</span>}
+            </button>
+          ))}
+        </nav>
+        <div className="p-3 border-t border-slate-100">
+          <div className="flex items-center gap-2.5 p-2 rounded-lg">
+            <Avatar name={user.name} size={30}/>
+            <div className="flex-1 min-w-0"><div className="text-xs font-semibold text-slate-900 truncate">{user.name}</div><div className="text-[10px] text-slate-400 uppercase">{user.role}</div></div>
+            <button onClick={logout} title="Logout" className="text-slate-300 hover:text-red-500 transition p-1 press">{Icon.logout}</button>
           </div>
-        )}
+        </div>
+      </aside>
 
-        {/* ═══ LEADS ═══ */}
-        {page === 'leads' && !selectedLead && (
-          <div className="fade-in">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900">Leads</h2>
-            </div>
-
-            {/* Search + Filters */}
-            <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search name, phone, email..."
-              className="w-full h-10 px-4 mb-3 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
-            <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
-              <button onClick={() => setStatusFilter('all')} className={`px-3 py-1.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${statusFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>All</button>
-              {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                <button key={k} onClick={() => setStatusFilter(k)} className={`px-3 py-1.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${statusFilter === k ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>{v}</button>
-              ))}
-            </div>
-
-            {/* Lead list */}
-            <div className="space-y-2">
-              {filteredLeads.map(l => (
-                <div key={l.id} onClick={() => setSelectedLead(l)}
-                  className="bg-white rounded-lg border border-slate-200 p-3 cursor-pointer hover:border-slate-400 transition">
-                  <div className="flex items-start justify-between mb-1">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">{l.name}</div>
-                      <div className="text-[11px] text-slate-400">{l.phone} {l.email && `· ${l.email}`}</div>
-                    </div>
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLORS[l.status]}`}>{STATUS_LABELS[l.status]}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-400">
-                    <span className="bg-slate-100 px-1.5 py-0.5 rounded">{l.source}</span>
-                    {l.course_interest && <span>{l.course_interest}</span>}
-                    <span>{l.staff?.name || 'Unassigned'}</span>
-                    <span className="ml-auto">{new Date(l.created_at).toLocaleDateString()}</span>
+      {/* Main */}
+      <div className="flex-1 md:ml-[220px] flex flex-col min-h-screen">
+        {/* Topbar */}
+        <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 sticky top-0 z-30">
+          <button className="md:hidden p-2 -ml-1" onClick={() => setSidebarOpen(true)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div className="flex-1 text-sm font-semibold text-slate-800">
+            {selectedLead ? (
+              <span className="flex items-center gap-1.5">
+                <button onClick={() => setSelectedLead(null)} className="text-slate-400 hover:text-slate-700 transition">{Icon.back}</button>
+                <span className="text-slate-300">/</span>
+                <span className="truncate">{selectedLead.name}</span>
+              </span>
+            ) : navItems.find(n => n.id === page)?.label || 'Dashboard'}
+          </div>
+          <div className="relative">
+            <button onClick={() => setShowNotifs(!showNotifs)}
+              className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 transition text-slate-500">
+              {Icon.bell}
+              {unread > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unread}</span>}
+            </button>
+            {showNotifs && (
+              <div className="absolute right-0 top-11 w-80 card shadow-xl z-50 fade-up overflow-hidden">
+                <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">Notifications {unread > 0 && <span className="text-blue-600">({unread})</span>}</span>
+                  <div className="flex gap-2">
+                    {unread > 0 && <button onClick={markAllRead} className="text-[10px] text-blue-600 font-medium">Mark all read</button>}
+                    <button onClick={() => setShowNotifs(false)} className="text-slate-300 hover:text-slate-600">{Icon.x}</button>
                   </div>
                 </div>
-              ))}
-              {filteredLeads.length === 0 && <p className="text-sm text-slate-300 text-center py-10">No leads found.</p>}
-            </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {notifications.length === 0 ? <div className="py-8 text-center text-xs text-slate-300">No notifications</div> :
+                    notifications.map(n => (
+                      <div key={n.id} onClick={() => { markNotifRead(n.id); setShowNotifs(false); if (n.lead_id) { const l = leads.find(x => x.id === n.lead_id); if (l) nav('leads', l) } }}
+                        className={`p-3 border-b border-slate-50 cursor-pointer hover:bg-slate-50 transition ${!n.is_read ? 'bg-blue-50/40' : ''}`}>
+                        <div className="flex items-start gap-2">
+                          {!n.is_read && <div className="live-dot mt-1.5 shrink-0"/>}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-slate-800">{n.title}</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">{n.message}</div>
+                            <div className="text-[10px] text-slate-300 mt-1">{timeAgo(n.created_at)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </header>
 
-        {/* ═══ LEAD DETAIL ═══ */}
-        {page === 'leads' && selectedLead && <LeadDetail
-          lead={selectedLead} staff={staff} courses={courses} user={user} isPM={isPM}
-          onBack={() => setSelectedLead(null)}
-          onAssign={(marketerId) => assignLead(selectedLead.id, marketerId)}
-          onStatusChange={(status, comment) => updateStatus(selectedLead.id, status, comment)}
-          onRefresh={() => loadAll(user)}
-          sb={sb}
-        />}
-
-        {/* ═══ ADD LEAD ═══ */}
-        {page === 'add' && <AddLeadForm courses={courses} onSubmit={addLead} onDone={() => setPage('leads')} />}
-
-        {/* ═══ STAFF ═══ */}
-        {page === 'staff' && isPM && <StaffManager staff={staff} sb={sb} onRefresh={() => loadAll(user)} />}
-
-        {/* ═══ COURSES ═══ */}
-        {page === 'courses' && isPM && <CourseManager courses={courses} sb={sb} onRefresh={() => loadAll(user)} />}
+        {/* Page */}
+        <main className="flex-1 p-4 md:p-6">
+          {loading ? <Spinner size={24}/> : (
+            <>
+              {page === 'dashboard'    && <Dashboard user={user} isPM={isPM} isMarketer={isMarketer} leads={leads} myLeads={myLeads} staff={staff} nav={nav}/>}
+              {page === 'leads'        && !selectedLead && <LeadList leads={myLeads} isPM={isPM} staff={staff} onSelect={l => { setSelectedLead(l) }}/>}
+              {page === 'leads'        && selectedLead && <LeadDetail lead={selectedLead} staff={staff} user={user} isPM={isPM} isMarketer={isMarketer} sb={sb} onAssign={assignLead} onStatusChange={updateStatus} onRegLink={sendRegLink} onRefresh={() => loadAll(user)}/>}
+              {page === 'my_leads'     && <MyLeads leads={myLeads} user={user} staff={staff} onSelect={l => { setSelectedLead(l); setPage('leads') }} onAddPersonal={() => nav('add_personal')} nav={nav}/>}
+              {page === 'add'          && <AddLead courses={courses} onSubmit={addLead} onDone={() => nav('leads')} isPM={isPM}/>}
+              {page === 'add_personal' && <AddLead courses={courses} onSubmit={addPersonalLead} onDone={() => nav('my_leads')} personal/>}
+              {page === 'analytics'    && <Analytics leads={leads} staff={staff} user={user} isPM={isPM}/>}
+              {page === 'finance'      && <Finance sb={sb} staff={staff} leads={leads} user={user}/>}
+              {page === 'admission'    && <Admission sb={sb} staff={staff} leads={leads} user={user}/>}
+              {page === 'staff'        && isPM && <StaffManager staff={staff} sb={sb} onRefresh={() => loadAll(user)}/>}
+              {page === 'courses'      && isPM && <CourseManager courses={courses} sb={sb} onRefresh={() => loadAll(user)}/>}
+              {page === 'integrations' && isPM && <Integrations sb={sb}/>}
+              {page === 'classes'      && isPM && <CohortManager sb={sb} staff={staff} courses={courses} user={user}/>}
+              {page === 'instructor'  && user?.role === 'instructor' && <InstructorDashboard sb={sb} user={user}/>}
+            </>
+          )}
+        </main>
       </div>
     </div>
   )
 }
 
-// ═══ LEAD DETAIL ═══
-function LeadDetail({ lead, staff, courses, user, isPM, onBack, onAssign, onStatusChange, onRefresh, sb }) {
+// ─── Dashboard ─────────────────────────────────────────────────────────────────
+function Dashboard({ user, isPM, isMarketer, leads, myLeads, staff, nav }) {
+  const data = isPM ? leads : myLeads
+  const now = new Date()
+  const thisMonth = data.filter(l => {
+    const d = new Date(l.created_at)
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  })
+  const registered = data.filter(l => l.status === 'registered')
+  const convRate = data.length ? Math.round((registered.length / data.length) * 100) : 0
+
+  const stats = [
+    { label: 'Total Leads', value: data.length, icon: '👥', sub: `${thisMonth.length} this month` },
+    { label: 'Registered', value: registered.length, icon: '🎓', color: 'text-emerald-600', sub: `${convRate}% conversion` },
+    { label: 'Follow Up', value: data.filter(l => l.status === 'follow_up').length, icon: '📞', color: 'text-amber-600' },
+    { label: 'Pending Reg.', value: data.filter(l => l.status === 'pending_registration').length, icon: '⏳', color: 'text-orange-600' },
+    ...(isPM ? [
+      { label: 'Unassigned', value: leads.filter(l => !l.assigned_to).length, icon: '⚠️', color: 'text-red-500' },
+      { label: 'Not Qualified', value: data.filter(l => l.status === 'not_qualified').length, icon: '✗', color: 'text-red-500' },
+    ] : [
+      { label: 'My Conversion', value: `${convRate}%`, icon: '🎯', color: convRate >= 30 ? 'text-emerald-600' : 'text-amber-600' },
+      { label: 'Personal Leads', value: myLeads.filter(l => l.source === 'personal').length, icon: '💼', color: 'text-violet-600' },
+    ]),
+  ]
+
+  const marketers = isPM ? staff.filter(s => s.role === 'marketer').map(m => ({
+    ...m,
+    total: leads.filter(l => l.assigned_to === m.id).length,
+    registered: leads.filter(l => l.assigned_to === m.id && l.status === 'registered').length,
+  })).sort((a, b) => b.registered - a.registered) : []
+
+  const sources = SOURCES.map(s => ({ label: s, value: data.filter(l => l.source === s).length })).filter(s => s.value > 0)
+
+  return (
+    <div className="fade-up space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">Good {new Date().getHours() < 12 ? 'morning' : 'afternoon'}, {user.name.split(' ')[0]} 👋</h1>
+        <p className="text-sm text-slate-400 mt-0.5">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {stats.map(s => <StatCard key={s.label} {...s}/>)}
+      </div>
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 card overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900">Recent Leads</h2>
+            <button onClick={() => nav('leads')} className="text-xs text-blue-600 font-medium">View all →</button>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {(isPM ? leads : myLeads).slice(0, 8).map(l => (
+              <div key={l.id} onClick={() => nav('leads', l)} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition">
+                <Avatar name={l.name} size={32}/>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-900">{l.name}</div>
+                  <div className="text-[11px] text-slate-400">{l.phone} · {l.assignee?.name || 'Unassigned'}</div>
+                </div>
+                <div className="text-right shrink-0"><Badge status={l.status}/><div className="text-[10px] text-slate-300 mt-1">{timeAgo(l.created_at)}</div></div>
+              </div>
+            ))}
+            {(isPM ? leads : myLeads).length === 0 && <EmptyState title="No leads yet" icon="📋" action={<button onClick={() => nav('add')} className="btn btn-primary btn-sm">Add Lead</button>}/>}
+          </div>
+        </div>
+        <div className="space-y-4">
+          {sources.length > 0 && (
+            <div className="card p-4">
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Lead Sources</h2>
+              <div className="space-y-2">
+                {sources.map(s => (
+                  <div key={s.label} className="flex items-center gap-2">
+                    <div className="text-[11px] text-slate-500 w-16 capitalize">{s.label}</div>
+                    <ProgressBar value={s.value} max={data.length}/>
+                    <div className="text-[11px] font-bold text-slate-700 w-5 text-right">{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {isPM && marketers.length > 0 && (
+            <div className="card p-4">
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Marketer Leaderboard</h2>
+              <div className="space-y-2.5">
+                {marketers.slice(0, 5).map((m, i) => (
+                  <div key={m.id} className="flex items-center gap-2.5">
+                    <div className="text-[10px] text-slate-300 w-3 font-bold">{i+1}</div>
+                    <Avatar name={m.name} size={26}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-700 truncate">{m.name}</div>
+                      <div className="text-[10px] text-slate-400">{m.total} leads</div>
+                    </div>
+                    <div className="text-xs font-bold text-emerald-600">{m.registered} 🎓</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {isPM && leads.filter(l => !l.assigned_to).length > 0 && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
+              <div className="text-xs font-bold text-amber-800 mb-1">⚠️ Unassigned Leads</div>
+              <div className="text-xl font-bold text-amber-900">{leads.filter(l => !l.assigned_to).length}</div>
+              <div className="text-[11px] text-amber-600 mb-2">leads need assignment</div>
+              <button onClick={() => nav('leads')} className="text-[11px] font-semibold text-amber-800 underline">Assign now →</button>
+            </div>
+          )}
+          {isMarketer && (
+            <div className="card p-4">
+              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">My Pipeline</h2>
+              <div className="space-y-2">
+                {['assigned','contacted','follow_up','pending_registration','registered'].map(s => {
+                  const count = myLeads.filter(l => l.status === s).length
+                  if (!count) return null
+                  return (
+                    <div key={s} className="flex items-center gap-2">
+                      <Badge status={s} className="w-28 justify-center shrink-0"/>
+                      <ProgressBar value={count} max={myLeads.length}/>
+                      <span className="text-xs font-bold text-slate-700 w-4 text-right">{count}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Lead List ─────────────────────────────────────────────────────────────────
+function LeadList({ leads, isPM, staff, onSelect }) {
+  const [search, setSearch] = useState('')
+  const [statusF, setStatusF] = useState('all')
+  const [sourceF, setSourceF] = useState('all')
+  const [sortBy, setSortBy] = useState('created_at')
+
+  const filtered = leads.filter(l => {
+    if (statusF !== 'all' && l.status !== statusF) return false
+    if (sourceF !== 'all' && l.source !== sourceF) return false
+    if (search) {
+      const q = search.toLowerCase()
+      return l.name?.toLowerCase().includes(q) || l.phone?.includes(q) || l.email?.toLowerCase().includes(q) || l.course_interest?.toLowerCase().includes(q)
+    }
+    return true
+  }).sort((a, b) => {
+    if (sortBy === 'name') return a.name.localeCompare(b.name)
+    if (sortBy === 'status') return a.status.localeCompare(b.status)
+    return new Date(b.created_at) - new Date(a.created_at)
+  })
+
+  return (
+    <div className="fade-up space-y-4">
+      <div className="flex flex-wrap gap-2">
+        <div className="relative flex-1 min-w-48">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, course…" className="inp pl-9 h-9 text-xs"/>
+        </div>
+        <select value={statusF} onChange={e => setStatusF(e.target.value)} className="inp h-9 text-xs w-auto">
+          <option value="all">All Statuses</option>
+          {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <select value={sourceF} onChange={e => setSourceF(e.target.value)} className="inp h-9 text-xs w-auto">
+          <option value="all">All Sources</option>
+          {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="inp h-9 text-xs w-auto">
+          <option value="created_at">Newest first</option>
+          <option value="name">Name A–Z</option>
+          <option value="status">By Status</option>
+        </select>
+      </div>
+      <div className="text-xs text-slate-400">{filtered.length} lead{filtered.length !== 1 ? 's' : ''}</div>
+      <div className="card overflow-hidden">
+        {filtered.length === 0 ? <EmptyState icon="📋" title="No leads match your filters"/> : (
+          <table className="data-table">
+            <thead><tr><th>Name</th><th className="hidden sm:table-cell">Phone</th><th>Status</th><th className="hidden md:table-cell">Source</th><th className="hidden lg:table-cell">Course</th><th className="hidden md:table-cell">Marketer</th><th className="hidden lg:table-cell">Date</th></tr></thead>
+            <tbody>
+              {filtered.map(l => (
+                <tr key={l.id} onClick={() => onSelect(l)}>
+                  <td>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={l.name} size={30}/>
+                      <div>
+                        <div className="font-medium text-slate-900">{l.name}</div>
+                        <div className="flex gap-1 mt-0.5">
+                          {l.whatsapp_sent && <span className="text-[9px] text-emerald-500 font-semibold">WA ✓</span>}
+                          {l.source === 'personal' && <span className="text-[9px] text-violet-500 font-semibold">Personal</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="hidden sm:table-cell text-slate-500 text-xs">{l.phone}</td>
+                  <td><Badge status={l.status}/></td>
+                  <td className="hidden md:table-cell"><span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded capitalize">{l.source}</span></td>
+                  <td className="hidden lg:table-cell text-slate-500 text-xs max-w-[140px] truncate">{l.course_interest || '—'}</td>
+                  <td className="hidden md:table-cell">
+                    {l.assignee ? <div className="flex items-center gap-1.5"><Avatar name={l.assignee.name} size={22}/><span className="text-xs text-slate-600">{l.assignee.name}</span></div> : <span className="text-xs text-slate-300">—</span>}
+                  </td>
+                  <td className="hidden lg:table-cell text-slate-400 text-xs">{timeAgo(l.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── My Leads (Marketer personal view) ────────────────────────────────────────
+function MyLeads({ leads, user, staff, onSelect, nav }) {
+  const now = new Date()
+  const registered = leads.filter(l => l.status === 'registered')
+  const thisMonth = leads.filter(l => {
+    const d = new Date(l.created_at)
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  })
+  const convRate = leads.length ? Math.round((registered.length / leads.length) * 100) : 0
+  const monthConv = thisMonth.length ? Math.round((thisMonth.filter(l => l.status === 'registered').length / thisMonth.length) * 100) : 0
+  const personalLeads = leads.filter(l => l.source === 'personal')
+
+  return (
+    <div className="fade-up space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">My Leads</h1>
+          <p className="text-sm text-slate-400 mt-0.5">Your assigned & personal leads + conversion stats</p>
+        </div>
+        <button onClick={() => nav('add_personal')} className="btn btn-primary">+ Personal Lead</button>
+      </div>
+
+      {/* My conversion stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="stat-card"><div className="stat-value">{leads.length}</div><div className="stat-label">Total Assigned</div></div>
+        <div className="stat-card"><div className={`stat-value ${convRate >= 30 ? 'text-emerald-600' : convRate >= 15 ? 'text-amber-600' : 'text-red-500'}`}>{convRate}%</div><div className="stat-label">Overall Conversion</div></div>
+        <div className="stat-card"><div className="stat-value text-blue-600">{monthConv}%</div><div className="stat-label">This Month's Rate</div></div>
+        <div className="stat-card"><div className="stat-value text-violet-600">{personalLeads.length}</div><div className="stat-label">Personal Leads</div></div>
+      </div>
+
+      {/* Registered leads = paid — their commission evidence */}
+      <div className="card overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Registered (Paid) — {registered.length}</h2>
+            <p className="text-xs text-slate-400 mt-0.5">These leads have paid registration fees</p>
+          </div>
+        </div>
+        {registered.length === 0 ? (
+          <EmptyState icon="🎓" title="No registrations yet" sub="Keep pushing — you're doing great!"/>
+        ) : (
+          <table className="data-table">
+            <thead><tr><th>Student</th><th>Course</th><th className="hidden sm:table-cell">Reg Fee</th><th className="hidden md:table-cell">Date</th><th>Source</th></tr></thead>
+            <tbody>
+              {registered.map(l => (
+                <tr key={l.id} onClick={() => onSelect(l)}>
+                  <td><div className="flex items-center gap-2.5"><Avatar name={l.name} size={30}/><div><div className="font-medium text-slate-900">{l.name}</div><div className="text-[10px] text-slate-400">{l.phone}</div></div></div></td>
+                  <td className="text-xs text-slate-600 max-w-[120px] truncate">{l.course_interest || '—'}</td>
+                  <td className="hidden sm:table-cell font-semibold text-emerald-600 text-sm">{l.reg_fee_paid ? fmtCurrency(l.reg_fee_paid) : '—'}</td>
+                  <td className="hidden md:table-cell text-xs text-slate-400">{fmtDate(l.reg_paid_at || l.updated_at)}</td>
+                  <td><span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded capitalize">{l.source}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Personal leads section */}
+      {personalLeads.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="p-4 border-b border-slate-100">
+            <h2 className="text-sm font-bold text-slate-900">My Personal Leads — {personalLeads.length}</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Leads you sourced yourself</p>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {personalLeads.map(l => (
+              <div key={l.id} onClick={() => onSelect(l)} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition">
+                <Avatar name={l.name} size={30}/>
+                <div className="flex-1 min-w-0"><div className="text-sm font-medium text-slate-900">{l.name}</div><div className="text-[11px] text-slate-400">{l.phone} · {l.course_interest || '—'}</div></div>
+                <Badge status={l.status}/>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Lead Detail ───────────────────────────────────────────────────────────────
+function LeadDetail({ lead, staff, user, isPM, isMarketer, sb, onAssign, onStatusChange, onRegLink, onRefresh }) {
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [newStatus, setNewStatus] = useState(lead.status)
+  const [posting, setPosting] = useState(false)
+  const [assigning, setAssigning] = useState(null)
+  const [editMode, setEditMode] = useState(false)
+  const [editData, setEditData] = useState({ name: lead.name, phone: lead.phone, email: lead.email, notes: lead.notes, city: lead.city })
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    sb.from('lead_comments').select('*').eq('lead_id', lead.id).order('created_at', { ascending: false }).then(({ data }) => setComments(data || []))
+    sb.from('lead_comments').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true })
+      .then(({ data }) => setComments(data || []))
   }, [lead.id])
 
-  async function addComment() {
+  const addComment = async () => {
     if (!newComment.trim()) return
+    setPosting(true)
     const statusChanged = newStatus !== lead.status
-    await onStatusChange(statusChanged ? newStatus : lead.status, newComment.trim())
+    await onStatusChange(lead.id, statusChanged ? newStatus : lead.status, newComment.trim())
     setNewComment('')
-    const { data } = await sb.from('lead_comments').select('*').eq('lead_id', lead.id).order('created_at', { ascending: false })
+    const { data } = await sb.from('lead_comments').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true })
     setComments(data || [])
-    onRefresh()
+    await onRefresh()
+    setPosting(false)
+  }
+
+  const handleAssign = async (mid) => { setAssigning(mid); await onAssign(lead.id, mid); setAssigning(null) }
+
+  const saveEdit = async () => {
+    await sb.from('leads').update({ ...editData, updated_at: new Date().toISOString() }).eq('id', lead.id)
+    await onRefresh(); setEditMode(false)
+  }
+
+  const copyRegLink = () => {
+    const link = marketerRegLink(lead.assigned_to, lead.id)
+    navigator.clipboard.writeText(link)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
   const marketers = staff.filter(s => s.role === 'marketer')
+  const phone = formatPhone(lead.phone)
+  const regLink = lead.assigned_to ? marketerRegLink(lead.assigned_to, lead.id) : null
 
   return (
-    <div className="fade-in">
-      <button onClick={onBack} className="text-xs text-slate-400 hover:text-slate-700 mb-4">← Back to Leads</button>
-
-      <div className="grid md:grid-cols-3 gap-4">
-        {/* Lead info */}
-        <div className="md:col-span-2">
-          <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900">{lead.name}</h2>
-                <div className="text-sm text-slate-400 mt-0.5">{lead.phone} {lead.email && `· ${lead.email}`}</div>
+    <div className="fade-up">
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          {/* Header */}
+          <div className="card p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={lead.name} size={44}/>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">{lead.name}</h2>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <Badge status={lead.status}/>
+                    {lead.whatsapp_sent && <span className="badge bg-green-50 text-green-600">WA Sent</span>}
+                    {lead.scholarship_interest && <span className="badge bg-purple-50 text-purple-600">Scholarship</span>}
+                    {lead.source === 'personal' && <span className="badge bg-violet-50 text-violet-600">Personal Lead</span>}
+                  </div>
+                </div>
               </div>
-              <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full ${STATUS_COLORS[lead.status]}`}>{STATUS_LABELS[lead.status]}</span>
+              <button onClick={() => setEditMode(!editMode)} className="btn btn-ghost btn-sm">{Icon.edit} Edit</button>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-400 text-xs">Source</span><div className="font-medium text-slate-700">{lead.source} {lead.source_campaign && `· ${lead.source_campaign}`}</div></div>
-              <div><span className="text-slate-400 text-xs">Course Interest</span><div className="font-medium text-slate-700">{lead.course_interest || '—'}</div></div>
-              <div><span className="text-slate-400 text-xs">Mode</span><div className="font-medium text-slate-700">{lead.mode_preference || '—'}</div></div>
-              <div><span className="text-slate-400 text-xs">Scholarship</span><div className="font-medium text-slate-700">{lead.scholarship_interest ? 'Yes' : 'No'}</div></div>
-              <div><span className="text-slate-400 text-xs">Assigned To</span><div className="font-medium text-slate-700">{lead.staff?.name || 'Unassigned'}</div></div>
-              <div><span className="text-slate-400 text-xs">Created</span><div className="font-medium text-slate-700">{new Date(lead.created_at).toLocaleString()}</div></div>
-            </div>
-            {lead.notes && <div className="mt-3 text-sm text-slate-500 bg-slate-50 rounded-lg p-3">{lead.notes}</div>}
+            {editMode ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2"><Label>Full Name</Label><input value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="inp"/></div>
+                <div><Label>Phone</Label><input value={editData.phone||''} onChange={e => setEditData({...editData, phone: e.target.value})} className="inp"/></div>
+                <div><Label>Email</Label><input value={editData.email||''} onChange={e => setEditData({...editData, email: e.target.value})} className="inp"/></div>
+                <div><Label>City</Label><input value={editData.city||''} onChange={e => setEditData({...editData, city: e.target.value})} className="inp"/></div>
+                <div className="col-span-2"><Label>Notes</Label><textarea value={editData.notes||''} onChange={e => setEditData({...editData, notes: e.target.value})} className="inp" rows="2"/></div>
+                <div className="col-span-2 flex gap-2">
+                  <button onClick={saveEdit} className="btn btn-primary btn-sm">{Icon.check} Save</button>
+                  <button onClick={() => setEditMode(false)} className="btn btn-ghost btn-sm">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                {[
+                  { label: 'Phone', value: lead.phone },
+                  { label: 'Email', value: lead.email || '—' },
+                  { label: 'City', value: lead.city || '—' },
+                  { label: 'Source', value: lead.source },
+                  { label: 'Course', value: lead.course_interest || '—' },
+                  { label: 'Mode', value: lead.mode_preference || '—' },
+                  { label: 'Assigned To', value: lead.assignee?.name || 'Unassigned' },
+                  { label: 'Created', value: fmtDate(lead.created_at) },
+                  { label: 'Updated', value: timeAgo(lead.updated_at) },
+                ].map(f => (
+                  <div key={f.label}>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">{f.label}</div>
+                    <div className="font-medium text-slate-700 capitalize">{f.value}</div>
+                  </div>
+                ))}
+                {lead.notes && <div className="col-span-2 md:col-span-3"><div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Notes</div><div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{lead.notes}</div></div>}
+              </div>
+            )}
           </div>
 
-          {/* Comments */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Activity & Comments</h3>
-
-            {/* Add comment */}
-            <div className="mb-4">
-              <div className="flex gap-2 mb-2">
-                <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="h-9 px-3 border border-slate-200 rounded-lg text-xs">
-                  {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {/* Activity */}
+          <div className="card p-5">
+            <h3 className="text-sm font-bold text-slate-900 mb-4">Activity Log</h3>
+            <div className="bg-slate-50 rounded-xl p-4 mb-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="inp h-9 text-xs w-auto">
+                  {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                 </select>
-                {newStatus !== lead.status && <span className="text-[10px] text-amber-600 font-medium self-center">Status will change</span>}
+                {newStatus !== lead.status && <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-2 py-1 rounded">Status will change</span>}
               </div>
               <div className="flex gap-2">
                 <input value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()}
-                  placeholder="Add a comment..." className="flex-1 h-10 px-4 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500" />
-                <button onClick={addComment} className="h-10 px-4 bg-blue-600 text-white rounded-lg text-xs font-semibold press">Post</button>
+                  placeholder="Add a note or update…" className="inp flex-1 text-sm"/>
+                <button onClick={addComment} disabled={!newComment.trim() || posting} className="btn btn-primary press">{posting ? '…' : 'Post'}</button>
               </div>
             </div>
-
-            {/* Comment list */}
-            <div className="space-y-3">
-              {comments.map(c => (
-                <div key={c.id} className="border-l-2 border-slate-200 pl-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-700">{c.staff_name}</span>
-                    {c.status_change && <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${STATUS_COLORS[c.status_change]}`}>{STATUS_LABELS[c.status_change]}</span>}
-                    <span className="text-[10px] text-slate-300 ml-auto">{new Date(c.created_at).toLocaleString()}</span>
+            <div className="space-y-4">
+              {comments.length === 0 ? <p className="text-xs text-slate-300 text-center py-6">No activity yet.</p> :
+                comments.map(c => (
+                  <div key={c.id} className="flex gap-3">
+                    <Avatar name={c.staff_name} size={28}/>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-semibold text-slate-800">{c.staff_name}</span>
+                        {c.status_change && <Badge status={c.status_change}/>}
+                        <span className="text-[10px] text-slate-300 ml-auto">{timeAgo(c.created_at)}</span>
+                      </div>
+                      <div className="text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{c.comment}</div>
+                    </div>
                   </div>
-                  <p className="text-sm text-slate-600 mt-0.5">{c.comment}</p>
-                </div>
-              ))}
-              {comments.length === 0 && <p className="text-xs text-slate-300 text-center py-4">No comments yet.</p>}
+                ))}
             </div>
           </div>
         </div>
 
-        {/* Sidebar — Assign */}
-        <div>
-          {isPM && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
-              <h3 className="text-sm font-bold text-slate-900 mb-3">Assign to Marketer</h3>
-              <div className="space-y-1.5">
-                {marketers.map(m => (
-                  <button key={m.id} onClick={() => onAssign(m.id)}
-                    className={`w-full flex items-center gap-2 p-2.5 rounded-lg text-left text-sm transition press ${lead.assigned_to === m.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50 border border-transparent'}`}>
-                    <div className="w-7 h-7 bg-slate-200 rounded-full flex items-center justify-center text-[10px] font-bold text-slate-600">{m.name.charAt(0)}</div>
-                    <span className="font-medium text-slate-700">{m.name}</span>
-                    {lead.assigned_to === m.id && <span className="text-[10px] text-blue-600 font-semibold ml-auto">Current</span>}
-                  </button>
-                ))}
-                {marketers.length === 0 && <p className="text-xs text-slate-300 text-center py-4">No marketers. Add staff first.</p>}
+        {/* Sidebar */}
+        <div className="space-y-4">
+          {/* Quick actions */}
+          <div className="card p-4">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h3>
+            <div className="space-y-1.5">
+              {lead.phone && <>
+                <a href={`tel:${lead.phone}`} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
+                  <span className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">{Icon.phone}</span>Call {lead.phone}
+                </a>
+                <a href={`https://wa.me/${phone}?text=${encodeURIComponent(WA_ASSIGN_MSG(lead.name, lead.assignee?.name || 'CCE'))}`} target="_blank" rel="noopener"
+                  className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
+                  <span className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center text-green-600">{Icon.wa}</span>WhatsApp
+                </a>
+              </>}
+              {lead.email && <a href={`mailto:${lead.email}`} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
+                <span className="w-7 h-7 bg-violet-50 rounded-lg flex items-center justify-center text-violet-600">{Icon.mail}</span>Email
+              </a>}
+            </div>
+          </div>
+
+          {/* Registration link */}
+          {(isPM || isMarketer) && lead.assigned_to && lead.status !== 'registered' && (
+            <div className="card p-4">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Registration Link</h3>
+              <p className="text-[10px] text-slate-400 mb-3">Send this unique link to the lead to complete registration & payment.</p>
+              {regLink && (
+                <div className="bg-slate-50 rounded-lg p-2 mb-3">
+                  <div className="text-[10px] font-mono text-slate-500 truncate">{regLink}</div>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button onClick={() => onRegLink(lead)}
+                  className="btn btn-primary flex-1 btn-sm">
+                  {Icon.wa} Send via WA
+                </button>
+                <button onClick={copyRegLink} className="btn btn-ghost btn-sm">
+                  {copied ? Icon.check : Icon.copy}
+                </button>
               </div>
             </div>
           )}
 
-          {/* Quick actions */}
-          <div className="bg-white rounded-xl border border-slate-200 p-4">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Quick Actions</h3>
-            <div className="space-y-1.5">
-              {lead.phone && <a href={`tel:${lead.phone}`} className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700">📞 Call {lead.phone}</a>}
-              {lead.phone && <a href={`https://wa.me/${lead.phone.replace(/\s/g, '').replace(/^0/, '233')}`} target="_blank" className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700">💬 WhatsApp</a>}
-              {lead.email && <a href={`mailto:${lead.email}`} className="flex items-center gap-2 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700">📧 Email</a>}
+          {/* Registered info */}
+          {lead.status === 'registered' && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+              <div className="text-xs font-bold text-emerald-800 mb-2">🎓 Registered & Paid</div>
+              {lead.reg_fee_paid && <div className="text-lg font-bold text-emerald-700">{fmtCurrency(lead.reg_fee_paid)}</div>}
+              <div className="text-[11px] text-emerald-600">{fmtDate(lead.reg_paid_at)}</div>
             </div>
-          </div>
+          )}
+
+          {/* Assign (PM only) */}
+          {isPM && (
+            <div className="card p-4">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Assign to Marketer</h3>
+              <p className="text-[10px] text-slate-400 mb-3">Auto-sends WhatsApp intro to the lead on assignment.</p>
+              {marketers.length === 0 ? <p className="text-xs text-slate-300 text-center py-4">No marketers added yet.</p> : (
+                <div className="space-y-1.5">
+                  {marketers.map(m => (
+                    <button key={m.id} onClick={() => handleAssign(m.id)} disabled={assigning === m.id}
+                      className={`w-full flex items-center gap-2.5 p-2.5 rounded-lg text-left transition press ${lead.assigned_to === m.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50 border border-transparent'}`}>
+                      <Avatar name={m.name} size={28}/>
+                      <span className="flex-1 text-sm font-medium text-slate-700">{m.name}</span>
+                      {assigning === m.id && <div className="w-3 h-3 border border-slate-300 border-t-blue-600 rounded-full animate-spin"/>}
+                      {lead.assigned_to === m.id && <span className="text-[10px] text-blue-600 font-bold">Current</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// ═══ ADD LEAD FORM ═══
-function AddLeadForm({ courses, onSubmit, onDone }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '', source: 'manual', course_interest: '', mode_preference: '', scholarship_interest: false, notes: '' })
+// ─── Add Lead ──────────────────────────────────────────────────────────────────
+function AddLead({ courses, onSubmit, onDone, isPM = false, personal = false }) {
+  const [form, setForm] = useState({
+    name: '', phone: '', email: '', source: personal ? 'personal' : 'manual',
+    course_interest: '', mode_preference: '', scholarship_interest: false, notes: '', city: '', country: 'Ghana'
+  })
   const [saving, setSaving] = useState(false)
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  async function submit() {
+  const submit = async () => {
     if (!form.name.trim()) return
-    setSaving(true)
-    await onSubmit(form)
-    setSaving(false)
-    setForm({ name: '', phone: '', email: '', source: 'manual', course_interest: '', mode_preference: '', scholarship_interest: false, notes: '' })
-    onDone()
+    setSaving(true); await onSubmit(form); setSaving(false); onDone()
   }
 
   return (
-    <div className="max-w-lg fade-in">
-      <h2 className="text-lg font-bold text-slate-900 mb-4">Add New Lead</h2>
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-        <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Full name *" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-        <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" type="tel" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-        <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="Email" type="email" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-        <select value={form.source} onChange={e => setForm({ ...form, source: e.target.value })} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm">
-          {SOURCES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </select>
-        <select value={form.course_interest} onChange={e => setForm({ ...form, course_interest: e.target.value })} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm">
-          <option value="">Course interest (optional)</option>
-          {courses.map(c => <option key={c.id} value={c.name}>{c.name} ({c.mode})</option>)}
-        </select>
+    <div className="fade-up max-w-xl">
+      <h1 className="text-lg font-bold text-slate-900 mb-5">{personal ? '+ Add Personal Lead' : '+ Add New Lead'}</h1>
+      {personal && <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4 text-xs text-violet-700">This lead will be added as your personal lead — it will be assigned directly to you.</div>}
+      <div className="card p-5 space-y-4">
+        <div><Label>Full Name *</Label><input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Kwame Asante" className="inp"/></div>
         <div className="grid grid-cols-2 gap-3">
-          <select value={form.mode_preference} onChange={e => setForm({ ...form, mode_preference: e.target.value })} className="h-10 px-3 border border-slate-200 rounded-lg text-sm">
-            <option value="">Mode</option>
-            <option value="in-person">In-Person</option>
-            <option value="online">Online</option>
+          <div><Label>Phone</Label><input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="0244 000 000" type="tel" className="inp"/></div>
+          <div><Label>Email</Label><input value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@example.com" type="email" className="inp"/></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {!personal && <div><Label>Source</Label>
+            <select value={form.source} onChange={e => set('source', e.target.value)} className="inp">
+              {SOURCES.filter(s => s !== 'personal').map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            </select>
+          </div>}
+          <div><Label>City</Label><input value={form.city} onChange={e => set('city', e.target.value)} placeholder="Accra" className="inp"/></div>
+        </div>
+        <div><Label>Course Interest</Label>
+          <select value={form.course_interest} onChange={e => set('course_interest', e.target.value)} className="inp">
+            <option value="">Select a course…</option>
+            {courses.map(c => <option key={c.id} value={c.name}>{c.name} ({c.mode})</option>)}
           </select>
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" checked={form.scholarship_interest} onChange={e => setForm({ ...form, scholarship_interest: e.target.checked })} /> Scholarship
+        </div>
+        <div className="grid grid-cols-2 gap-3 items-end">
+          <div><Label>Mode Preference</Label>
+            <select value={form.mode_preference} onChange={e => set('mode_preference', e.target.value)} className="inp">
+              <option value="">No preference</option>
+              <option value="in-person">In-Person</option>
+              <option value="online">Online</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-600 pb-2 cursor-pointer">
+            <input type="checkbox" checked={form.scholarship_interest} onChange={e => set('scholarship_interest', e.target.checked)} className="w-4 h-4 accent-blue-600"/>
+            Needs scholarship
           </label>
         </div>
-        <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Notes" className="w-full h-16 px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none" />
-        <button onClick={submit} disabled={!form.name.trim() || saving} className="w-full h-10 bg-blue-600 text-white rounded-lg text-sm font-semibold press disabled:opacity-50">{saving ? 'Saving...' : 'Add Lead'}</button>
+        <div><Label>Notes</Label><textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any additional notes…" className="inp" rows="3"/></div>
+        <button onClick={submit} disabled={!form.name.trim() || saving} className="btn btn-primary w-full press">
+          {saving ? 'Adding…' : personal ? 'Add My Lead' : 'Add Lead'}
+        </button>
       </div>
     </div>
   )
 }
 
-// ═══ STAFF MANAGER ═══
+// ─── Staff Manager ─────────────────────────────────────────────────────────────
 function StaffManager({ staff, sb, onRefresh }) {
   const [editing, setEditing] = useState(null)
-  async function save() {
-    if (!editing) return
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
     const { id, created_at, ...data } = editing
     if (id) await sb.from('staff').update(data).eq('id', id)
     else await sb.from('staff').insert(data)
-    setEditing(null); onRefresh()
+    setSaving(false); setEditing(null); onRefresh()
   }
-  async function del(id) { if (confirm('Delete this staff?')) { await sb.from('staff').delete().eq('id', id); onRefresh() } }
+  const del = async (id) => { if (!confirm('Deactivate this staff member?')) return; await sb.from('staff').update({ is_active: false }).eq('id', id); onRefresh() }
 
   return (
-    <div className="fade-in">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-slate-900">Staff</h2>
-        <button onClick={() => setEditing({ name: '', email: '', phone: '', role: 'marketer', is_active: true })} className="h-9 px-4 bg-blue-600 text-white rounded-lg text-xs font-semibold">+ Add Staff</button>
+    <div className="fade-up max-w-2xl">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-lg font-bold text-slate-900">Staff ({staff.length})</h1>
+        <button onClick={() => setEditing({ name: '', email: '', phone: '', role: 'marketer', is_active: true })} className="btn btn-primary btn-sm">+ Add Staff</button>
       </div>
       {editing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-5 w-full max-w-sm">
-            <h3 className="font-bold text-slate-900 mb-4">{editing.id ? 'Edit' : 'New'} Staff</h3>
-            <div className="space-y-3">
-              <input value={editing.name || ''} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="Name" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-              <input value={editing.email || ''} onChange={e => setEditing({ ...editing, email: e.target.value })} placeholder="Email" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-              <input value={editing.phone || ''} onChange={e => setEditing({ ...editing, phone: e.target.value })} placeholder="Phone" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-              <select value={editing.role} onChange={e => setEditing({ ...editing, role: e.target.value })} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm">
-                <option value="marketer">Marketer</option>
-                <option value="pm">Project Manager</option>
-                <option value="admin">Admin</option>
-                <option value="finance">Finance</option>
-                <option value="admission">Admission</option>
-                <option value="receptionist">Receptionist</option>
+        <Modal title={`${editing.id ? 'Edit' : 'New'} Staff`} onClose={() => setEditing(null)}>
+          <div className="space-y-3">
+            <div><Label>Full Name *</Label><input value={editing.name||''} onChange={e => setEditing({...editing,name:e.target.value})} className="inp"/></div>
+            <div><Label>Email</Label><input value={editing.email||''} onChange={e => setEditing({...editing,email:e.target.value})} type="email" className="inp"/></div>
+            <div><Label>Phone</Label><input value={editing.phone||''} onChange={e => setEditing({...editing,phone:e.target.value})} type="tel" className="inp"/></div>
+            <div><Label>Role</Label>
+              <select value={editing.role} onChange={e => setEditing({...editing,role:e.target.value})} className="inp">
+                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase()+r.slice(1)}</option>)}
               </select>
             </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={save} className="flex-1 h-10 bg-blue-600 text-white rounded-lg text-sm font-semibold">Save</button>
-              <button onClick={() => setEditing(null)} className="flex-1 h-10 bg-slate-100 text-slate-600 rounded-lg text-sm font-semibold">Cancel</button>
-            </div>
           </div>
-        </div>
+          <div className="flex gap-2 mt-5">
+            <button onClick={save} disabled={!editing.name||saving} className="btn btn-primary flex-1">{saving?'Saving…':'Save'}</button>
+            <button onClick={() => setEditing(null)} className="btn btn-ghost flex-1">Cancel</button>
+          </div>
+        </Modal>
       )}
-      <div className="space-y-2">
-        {staff.map(s => (
-          <div key={s.id} className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center text-sm font-bold text-slate-600">{s.name.charAt(0)}</div>
-              <div><div className="text-sm font-semibold text-slate-900">{s.name}</div><div className="text-[10px] text-slate-400 uppercase">{s.role} · {s.email || s.phone || ''}</div></div>
-            </div>
-            <div className="flex gap-1">
-              <button onClick={() => setEditing(s)} className="text-[10px] px-2 py-1 bg-slate-100 text-slate-600 rounded font-semibold">Edit</button>
-              <button onClick={() => del(s.id)} className="text-[10px] px-2 py-1 bg-red-50 text-red-600 rounded font-semibold">Del</button>
-            </div>
-          </div>
-        ))}
+      <div className="card overflow-hidden">
+        {staff.length === 0 ? <EmptyState icon="👤" title="No staff yet"/> : (
+          <table className="data-table">
+            <thead><tr><th>Name</th><th>Role</th><th className="hidden sm:table-cell">Contact</th><th>Actions</th></tr></thead>
+            <tbody>
+              {staff.map(s => (
+                <tr key={s.id}>
+                  <td><div className="flex items-center gap-2.5"><Avatar name={s.name} size={32}/><span className="font-medium text-slate-900">{s.name}</span></div></td>
+                  <td><span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-1 rounded capitalize">{s.role}</span></td>
+                  <td className="hidden sm:table-cell text-xs text-slate-500">{s.email||s.phone||'—'}</td>
+                  <td><div className="flex gap-1.5"><button onClick={() => setEditing(s)} className="btn btn-ghost btn-sm">{Icon.edit}</button><button onClick={() => del(s.id)} className="btn btn-danger btn-sm">{Icon.trash}</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )
 }
 
-// ═══ COURSE MANAGER ═══
+// ─── Course Manager ────────────────────────────────────────────────────────────
 function CourseManager({ courses, sb, onRefresh }) {
   const [editing, setEditing] = useState(null)
-  async function save() {
-    if (!editing) return
+  const [saving, setSaving] = useState(false)
+  const save = async () => {
+    setSaving(true)
     const { id, created_at, ...data } = editing
     if (id) await sb.from('courses').update(data).eq('id', id)
     else await sb.from('courses').insert(data)
-    setEditing(null); onRefresh()
+    setSaving(false); setEditing(null); onRefresh()
   }
-  async function del(id) { if (confirm('Delete?')) { await sb.from('courses').delete().eq('id', id); onRefresh() } }
+  const del = async (id) => { if (!confirm('Delete this course?')) return; await sb.from('courses').delete().eq('id', id); onRefresh() }
 
   return (
-    <div className="fade-in">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-slate-900">Courses</h2>
-        <button onClick={() => setEditing({ name: '', description: '', mode: 'in-person', duration: '', fee: 0, scholarship_available: false, is_active: true })} className="h-9 px-4 bg-blue-600 text-white rounded-lg text-xs font-semibold">+ Add Course</button>
+    <div className="fade-up max-w-2xl">
+      <div className="flex items-center justify-between mb-5">
+        <h1 className="text-lg font-bold text-slate-900">Courses ({courses.length})</h1>
+        <button onClick={() => setEditing({ name:'',description:'',mode:'in-person',duration:'',fee:0,reg_fee:150,scholarship_available:false,is_active:true })} className="btn btn-primary btn-sm">+ Add Course</button>
       </div>
       {editing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-5 w-full max-w-sm">
-            <h3 className="font-bold text-slate-900 mb-4">{editing.id ? 'Edit' : 'New'} Course</h3>
-            <div className="space-y-3">
-              <input value={editing.name || ''} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="Course name" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-              <textarea value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} placeholder="Description" className="w-full h-16 px-3 py-2 border border-slate-200 rounded-lg text-sm resize-none" />
-              <select value={editing.mode} onChange={e => setEditing({ ...editing, mode: e.target.value })} className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm">
-                <option value="in-person">In-Person</option>
-                <option value="online">Online</option>
-                <option value="hybrid">Hybrid</option>
-              </select>
-              <input value={editing.duration || ''} onChange={e => setEditing({ ...editing, duration: e.target.value })} placeholder="Duration (e.g. 6 months)" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-              <input type="number" value={editing.fee || ''} onChange={e => setEditing({ ...editing, fee: Number(e.target.value) })} placeholder="Fee (GHS)" className="w-full h-10 px-3 border border-slate-200 rounded-lg text-sm" />
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editing.scholarship_available} onChange={e => setEditing({ ...editing, scholarship_available: e.target.checked })} /> Scholarship Available</label>
+        <Modal title={`${editing.id ? 'Edit' : 'New'} Course`} onClose={() => setEditing(null)}>
+          <div className="space-y-3">
+            <div><Label>Course Name *</Label><input value={editing.name||''} onChange={e => setEditing({...editing,name:e.target.value})} className="inp"/></div>
+            <div><Label>Description</Label><textarea value={editing.description||''} onChange={e => setEditing({...editing,description:e.target.value})} className="inp" rows="2"/></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Mode</Label>
+                <select value={editing.mode} onChange={e => setEditing({...editing,mode:e.target.value})} className="inp">
+                  <option value="in-person">In-Person</option><option value="online">Online</option><option value="hybrid">Hybrid</option>
+                </select>
+              </div>
+              <div><Label>Duration</Label><input value={editing.duration||''} onChange={e => setEditing({...editing,duration:e.target.value})} placeholder="e.g. 3 months" className="inp"/></div>
             </div>
-            <div className="flex gap-2 mt-5">
-              <button onClick={save} className="flex-1 h-10 bg-blue-600 text-white rounded-lg text-sm font-semibold">Save</button>
-              <button onClick={() => setEditing(null)} className="flex-1 h-10 bg-slate-100 text-slate-600 rounded-lg text-sm font-semibold">Cancel</button>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Course Fee (GH₵)</Label><input type="number" value={editing.fee||''} onChange={e => setEditing({...editing,fee:Number(e.target.value)})} className="inp"/></div>
+              <div><Label>Registration Fee (GH₵)</Label><input type="number" value={editing.reg_fee||150} onChange={e => setEditing({...editing,reg_fee:Number(e.target.value)})} className="inp"/></div>
             </div>
+            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+              <input type="checkbox" checked={editing.scholarship_available} onChange={e => setEditing({...editing,scholarship_available:e.target.checked})} className="accent-blue-600"/>
+              Scholarship available
+            </label>
+          </div>
+          <div className="flex gap-2 mt-5">
+            <button onClick={save} disabled={!editing.name||saving} className="btn btn-primary flex-1">{saving?'Saving…':'Save'}</button>
+            <button onClick={() => setEditing(null)} className="btn btn-ghost flex-1">Cancel</button>
+          </div>
+        </Modal>
+      )}
+      <div className="card overflow-hidden">
+        {courses.length === 0 ? <EmptyState icon="📚" title="No courses yet"/> : (
+          <table className="data-table">
+            <thead><tr><th>Course</th><th>Mode</th><th className="hidden sm:table-cell">Duration</th><th>Course Fee</th><th>Reg. Fee</th><th>Actions</th></tr></thead>
+            <tbody>
+              {courses.map(c => (
+                <tr key={c.id}>
+                  <td><div className="font-medium text-slate-900">{c.name}</div>{c.scholarship_available && <div className="text-[10px] text-purple-500 font-semibold">🎓 Scholarship</div>}</td>
+                  <td><span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{c.mode}</span></td>
+                  <td className="hidden sm:table-cell text-xs text-slate-500">{c.duration||'—'}</td>
+                  <td className="font-semibold text-slate-900 text-sm">{fmtCurrency(c.fee)}</td>
+                  <td className="font-semibold text-blue-700 text-sm">{fmtCurrency(c.reg_fee||150)}</td>
+                  <td><div className="flex gap-1.5"><button onClick={() => setEditing(c)} className="btn btn-ghost btn-sm">{Icon.edit}</button><button onClick={() => del(c.id)} className="btn btn-danger btn-sm">{Icon.trash}</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Integrations ──────────────────────────────────────────────────────────────
+function Integrations({ sb }) {
+  const [fbConfig, setFbConfig] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [copied, setCopied] = useState('')
+  const [form, setForm] = useState({ page_id:'', page_access_token:'', form_id:'', verify_token:'cce_webhook_2026' })
+
+  useEffect(() => {
+    sb.from('fb_config').select('*').limit(1).then(({ data }) => {
+      if (data?.[0]) { setFbConfig(data[0]); setForm(data[0]) }
+      setLoading(false)
+    })
+  }, [])
+
+  const save = async () => {
+    setSaving(true)
+    if (fbConfig?.id) await sb.from('fb_config').update(form).eq('id', fbConfig.id)
+    else { const { data } = await sb.from('fb_config').insert(form).select().single(); setFbConfig(data) }
+    setSaving(false)
+  }
+
+  const copyUrl = (url, key) => { navigator.clipboard.writeText(url); setCopied(key); setTimeout(() => setCopied(''), 2000) }
+
+  const fbWebhook = `${window.location.origin}/api/webhook/facebook`
+  const psWebhook = `${window.location.origin}/api/webhook/paystack`
+
+  return (
+    <div className="fade-up max-w-2xl space-y-5">
+      <h1 className="text-lg font-bold text-slate-900">Integrations</h1>
+
+      {/* Paystack */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 bg-teal-600 rounded-xl flex items-center justify-center text-white text-sm font-bold">₵</div>
+          <div><div className="font-bold text-slate-900">Paystack Payments</div><div className="text-xs text-slate-400">Registration fee collection via Paystack</div></div>
+          <div className={`ml-auto badge ${import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+            {import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ? 'Configured' : 'Needs Key'}
           </div>
         </div>
-      )}
-      <div className="space-y-2">
-        {courses.map(c => (
-          <div key={c.id} className="bg-white rounded-lg border border-slate-200 p-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">{c.name}</div>
-              <div className="text-[10px] text-slate-400">{c.mode} · {c.duration} · GH₵ {Number(c.fee).toFixed(2)} {c.scholarship_available && '· 🎓 Scholarship'}</div>
+        <div className="space-y-3 text-xs text-slate-600">
+          <div className="bg-slate-50 rounded-xl p-4">
+            <div className="font-bold text-slate-800 mb-1">Paystack Webhook URL</div>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 font-mono text-[11px] truncate">{psWebhook}</code>
+              <button onClick={() => copyUrl(psWebhook,'ps')} className="btn btn-ghost btn-sm shrink-0">{copied==='ps' ? Icon.check : Icon.copy}</button>
             </div>
-            <div className="flex gap-1">
-              <button onClick={() => setEditing(c)} className="text-[10px] px-2 py-1 bg-slate-100 text-slate-600 rounded font-semibold">Edit</button>
-              <button onClick={() => del(c.id)} className="text-[10px] px-2 py-1 bg-red-50 text-red-600 rounded font-semibold">Del</button>
-            </div>
+            <div className="text-slate-400 mt-1">Add this in Paystack Dashboard → Settings → Webhooks</div>
           </div>
-        ))}
-        {courses.length === 0 && <p className="text-sm text-slate-300 text-center py-8">No courses. Add one above.</p>}
+          <div className="bg-blue-50 rounded-xl p-4 space-y-1">
+            <div className="font-bold text-blue-800">Setup:</div>
+            <div>1. Add <code>VITE_PAYSTACK_PUBLIC_KEY</code> to Vercel env vars</div>
+            <div>2. Add <code>PAYSTACK_SECRET_KEY</code> to Vercel env vars (server only)</div>
+            <div>3. Set registration fees per course in the Courses section</div>
+            <div>4. Add the webhook URL above in Paystack Dashboard</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Facebook */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white">{Icon.fb}</div>
+          <div><div className="font-bold text-slate-900">Facebook Lead Ads</div><div className="text-xs text-slate-400">Auto-capture leads from Facebook ad forms</div></div>
+          <div className={`ml-auto badge ${fbConfig ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>{fbConfig ? 'Connected' : 'Not set up'}</div>
+        </div>
+        {loading ? <Spinner size={16}/> : (
+          <div className="space-y-3">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="font-bold text-slate-800 text-xs mb-1">Webhook URL</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 font-mono text-[11px] truncate">{fbWebhook}</code>
+                <button onClick={() => copyUrl(fbWebhook,'fb')} className="btn btn-ghost btn-sm shrink-0">{copied==='fb' ? Icon.check : Icon.copy}</button>
+              </div>
+            </div>
+            <div><Label>Facebook Page ID</Label><input value={form.page_id||''} onChange={e => setForm({...form,page_id:e.target.value})} className="inp"/></div>
+            <div><Label>Page Access Token</Label><input value={form.page_access_token||''} onChange={e => setForm({...form,page_access_token:e.target.value})} type="password" className="inp"/></div>
+            <div><Label>Verify Token</Label><input value={form.verify_token||''} onChange={e => setForm({...form,verify_token:e.target.value})} className="inp"/></div>
+            <button onClick={save} disabled={saving} className="btn btn-primary">{saving?'Saving…':'Save FB Config'}</button>
+          </div>
+        )}
+      </div>
+
+      {/* Google Sheets */}
+      <div className="card p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center text-white text-sm font-bold">G</div>
+          <div><div className="font-bold text-slate-900">Google Sheets Sync</div><div className="text-xs text-slate-400">Auto-log every registration to a shared sheet</div></div>
+          <div className="ml-auto badge bg-slate-100 text-slate-400">Via Webhook</div>
+        </div>
+        <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 space-y-2">
+          <div className="font-bold text-slate-800">How to set up:</div>
+          <div>1. Open Google Sheets → Extensions → Apps Script</div>
+          <div>2. Create a <code>doPost(e)</code> function that writes to your sheet</div>
+          <div>3. Deploy as Web App → Anyone (with link) → Copy the URL</div>
+          <div>4. Add <code>VITE_SHEETS_WEBHOOK_URL</code> to your Vercel environment</div>
+          <div>Every successful registration payment will POST the student data to your sheet automatically.</div>
+        </div>
       </div>
     </div>
   )

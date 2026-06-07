@@ -30,6 +30,25 @@ export const marketerRegLink = (marketerId, leadId) => {
   return `${base}/register?m=${marketerId}&l=${leadId}`
 }
 
+// Arkesel SMS
+const ARKESEL_KEY = 'VXliSENVQnpsYkhWYlNpZkNRZEc'
+const SMS_SENDER = 'Cambridge'
+
+export const sendSMS = async (phone, message) => {
+  if (!phone) return
+  const recipient = formatPhone(phone)
+  try {
+    const res = await fetch('https://sms.arkesel.com/api/v2/sms/send', {
+      method: 'POST',
+      headers: { 'api-key': ARKESEL_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: SMS_SENDER, message, recipients: [recipient] }),
+    })
+    const data = await res.json()
+    console.log('SMS sent to', recipient, data)
+    return data
+  } catch (e) { console.error('SMS error:', e); return null }
+}
+
 // Load Paystack inline script once
 let paystackLoaded = false
 export const loadPaystack = () => new Promise((resolve) => {
