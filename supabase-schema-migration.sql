@@ -88,10 +88,14 @@ ALTER TABLE school_fee_invoices
   ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS net_fee DECIMAL(10,2) DEFAULT 0;
 
--- Back-fill net_fee for existing invoices (total - 0 scholarship - 0 discount = total)
-UPDATE school_fee_invoices
-  SET net_fee = total_fee - COALESCE(scholarship_amount, 0) - COALESCE(discount_amount, 0)
-  WHERE net_fee = 0 AND total_fee > 0;
+-- Back-fill net_fee for existing invoices
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='school_fee_invoices' AND column_name='total_fee') THEN
+    UPDATE school_fee_invoices
+      SET net_fee = total_fee - COALESCE(scholarship_amount, 0) - COALESCE(discount_amount, 0)
+      WHERE net_fee = 0 AND total_fee > 0;
+  END IF;
+END $$;
 
 -- ══ receipts — add student contact columns ════════════════
 ALTER TABLE receipts
