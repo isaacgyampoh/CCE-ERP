@@ -31,12 +31,16 @@ export default function Finance({ sb, staff, leads, user }) {
   const [recording, setRecording]         = useState(false)
   const [receiptData, setReceiptData]     = useState(null)
 
+  const [receipts, setReceipts]           = useState([])
+  const [loadingReceipts, setLoadingReceipts] = useState(false)
+
   const now = new Date()
   const marketers = staff.filter(s => s.role === 'marketer')
 
   useEffect(() => { loadPayments() }, [])
   useEffect(() => { if (tab === 'fees' && !cohorts.length) loadCohorts() }, [tab])
   useEffect(() => { if (tab === 'pending_cash') loadPendingCash() }, [tab])
+  useEffect(() => { if (tab === 'receipts') loadReceipts() }, [tab])
   useEffect(() => { if (selectedCohort) loadCohortFees(selectedCohort) }, [selectedCohort])
 
   const loadPayments = async () => {
@@ -126,6 +130,16 @@ export default function Finance({ sb, staff, leads, user }) {
     setSavingFee(false)
     setEditingFee(null)
     loadCohortFees(selectedCohort)
+  }
+
+  const loadReceipts = async () => {
+    setLoadingReceipts(true)
+    const { data } = await sb.from('receipts')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100)
+    setReceipts(data || [])
+    setLoadingReceipts(false)
   }
 
   const recordPayment = async () => {
@@ -226,9 +240,10 @@ export default function Finance({ sb, staff, leads, user }) {
   }
 
   const TABS = [
-    { id: 'payments', label: 'Payments' },
-    { id: 'fees', label: 'Student Fees' },
+    { id: 'payments',     label: 'Payments' },
+    { id: 'fees',         label: 'Student Fees' },
     { id: 'pending_cash', label: `Pending Cash${pendingCash.length ? ` (${pendingCash.length})` : ''}` },
+    { id: 'receipts',     label: 'Receipts' },
   ]
 
   return (
@@ -537,6 +552,81 @@ export default function Finance({ sb, staff, leads, user }) {
               </div>
             </Modal>
           )}
+
+      {/* ── Receipts Tab ── */}
+      {tab === 'receipts' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Receipt History</h2>
+              <p style={{ fontSize:12, color:'var(--ink-3)', marginTop:2 }}>All payment receipts sent to students</p>
+            </div>
+            <button onClick={loadReceipts} className="btn btn-ghost btn-sm">↺ Refresh</button>
+          </div>
+
+          {loadingReceipts ? <Spinner size={24}/> : receipts.length === 0 ? (
+            <EmptyState title="No receipts yet" sub="Receipts are generated automatically when payments are recorded"/>
+          ) : (
+            <div className="card overflow-hidden">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Receipt No.</th>
+                    <th>Student</th>
+                    <th className="hidden sm:table-cell">Course</th>
+                    <th>Amount</th>
+                    <th className="hidden md:table-cell">Type</th>
+                    <th className="hidden md:table-cell">Sent via</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receipts.map(r => (
+                    <tr key={r.id}>
+                      <td style={{ fontFamily:'monospace', fontWeight:700, fontSize:11, color:'var(--accent)' }}>{r.receipt_no}</td>
+                      <td>
+                        <div style={{ fontWeight:500, color:'var(--ink)', fontSize:13 }}>{r.student_name}</div>
+                        {r.student_phone && <div style={{ fontSize:10, color:'var(--ink-3)' }}>{r.student_phone}</div>}
+                      </td>
+                      <td className="hidden sm:table-cell" style={{ fontSize:12, color:'var(--ink-2)' }}>{r.payment_type || '—'}</td>
+                      <td style={{ fontWeight:700, color:'var(--ok)', fontSize:13 }}>{fmtCurrency(r.amount)}</td>
+                      <td className="hidden md:table-cell"><span className="tag">{r.payment_type || 'payment'}</span></td>
+                      <td className="hidden md:table-cell" style={{ fontSize:11, color:'var(--ink-3)' }}>{r.sent_via || '—'}</td>
+                      <td style={{ fontSize:11, color:'var(--ink-3)', whiteSpace:'nowrap' }}>{fmtDate(r.created_at)}</td>
+                      <td>
+                        <div style={{ display:'flex', gap:6 }}>
+                          <button
+                            onClick={() => printReceipt({
+                              receipt_no: r.receipt_no, student_name: r.student_name,
+                              course: r.payment_type, method: r.sent_via || '—',
+                              paid_at: r.sent_at || r.created_at,
+                              amount_paid: r.amount, total_paid: r.amount,
+                              new_balance: 0,
+                            })}
+                            className="btn btn-ghost btn-sm" title="Print receipt"
+                          >🖨</button>
+                          {r.student_phone && (
+                            <button
+                              onClick={() => {
+                                const clean = r.student_phone.replace(/\s/g,'').replace(/^0/,'233').replace(/^\+/,'')
+                                const msg = `🧾 Receipt ${r.receipt_no} — ${fmtCurrency(r.amount)} confirmed. Cambridge Center of Excellence.`
+                                window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`, '_blank')
+                              }}
+                              className="btn btn-ghost btn-sm" title="Send via WhatsApp"
+                              style={{ color:'var(--ok)' }}
+                            >💬</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
           {receiptData && (
             <Modal title="Payment Recorded" onClose={() => setReceiptData(null)}>

@@ -120,23 +120,25 @@ body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:0}
   // Send SMS
   if (phone) results.sms = await sendSMS({ phone, message: smsMsg, leadId: lead_id || payment.lead_id, type: 'receipt' })
 
-  // Save receipt record
+  const sentChannels = [
+    results.email?.ok && 'email',
+    results.wa?.ok    && 'whatsapp',
+    results.sms?.ok   && 'sms',
+  ].filter(Boolean).join(',') || 'none'
+
   await sb.from('receipts').insert({
-    payment_id: payment_id || null,
-    lead_id: lead_id || payment.lead_id,
+    payment_id:      payment_id || null,
+    lead_id:         lead_id || payment.lead_id,
     registration_id: registration_id || payment.registration_id,
-    receipt_number: receiptNo,
-    student_name: name,
-    student_email: email,
-    student_phone: phone,
+    receipt_no:      receiptNo,
+    student_name:    name,
+    student_email:   email,
+    student_phone:   phone,
     amount,
     payment_type,
-    payment_channel: channel,
-    reference: ref,
-    sent_via_email: !!results.email?.ok,
-    sent_via_wa:    !!results.wa?.ok,
-    sent_via_sms:   !!results.sms?.ok,
+    sent_via:  sentChannels,
+    sent_at:   new Date().toISOString(),
   })
 
-  return res.status(200).json({ ok: true, receipt_number: receiptNo, results })
+  return res.status(200).json({ ok: true, receipt_no: receiptNo, results })
 }

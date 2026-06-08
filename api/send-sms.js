@@ -1,4 +1,4 @@
-import { sendSMS } from './lib/notify.js'
+import { sendSMS } from './_lib/notify.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
