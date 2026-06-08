@@ -38,9 +38,15 @@ ALTER TABLE enrolments
   ADD COLUMN IF NOT EXISTS reminder_1week_sent BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS reminder_2day_sent BOOLEAN DEFAULT false;
 
--- Back-fill student_phone/email from existing phone/email columns
-UPDATE enrolments SET student_phone = phone WHERE student_phone = '' AND phone != '';
-UPDATE enrolments SET student_email = email WHERE student_email = '' AND email != '';
+-- Back-fill student_phone/email from existing phone/email columns (if they exist)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='enrolments' AND column_name='phone') THEN
+    UPDATE enrolments SET student_phone = phone WHERE student_phone = '' AND phone != '';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='enrolments' AND column_name='email') THEN
+    UPDATE enrolments SET student_email = email WHERE student_email = '' AND email != '';
+  END IF;
+END $$;
 
 -- ══ class_sessions — add dual attendance codes + timestamps ═
 ALTER TABLE class_sessions
@@ -52,10 +58,13 @@ ALTER TABLE class_sessions
   ADD COLUMN IF NOT EXISTS attendance_link_sent BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS attendance_link_sent_at TIMESTAMPTZ;
 
--- Back-fill attendance_opened_at from legacy opened_at
-UPDATE class_sessions
-  SET attendance_opened_at = opened_at
-  WHERE attendance_opened_at IS NULL AND opened_at IS NOT NULL;
+-- Back-fill attendance_opened_at from legacy opened_at (if it exists)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='class_sessions' AND column_name='opened_at') THEN
+    UPDATE class_sessions SET attendance_opened_at = opened_at
+    WHERE attendance_opened_at IS NULL AND opened_at IS NOT NULL;
+  END IF;
+END $$;
 
 -- ══ attendance — add lead_id, student_phone, code tracking ═
 ALTER TABLE attendance
@@ -65,8 +74,12 @@ ALTER TABLE attendance
   ADD COLUMN IF NOT EXISTS code_valid BOOLEAN DEFAULT false,
   ADD COLUMN IF NOT EXISTS ip_address TEXT DEFAULT '';
 
--- Back-fill student_phone from existing phone column
-UPDATE attendance SET student_phone = phone WHERE student_phone = '' AND phone != '';
+-- Back-fill student_phone from existing phone column (if it exists)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='attendance' AND column_name='phone') THEN
+    UPDATE attendance SET student_phone = phone WHERE student_phone = '' AND phone != '';
+  END IF;
+END $$;
 
 -- ══ school_fee_invoices — add cohort, scholarship, discount ═
 ALTER TABLE school_fee_invoices
