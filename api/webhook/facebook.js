@@ -9,11 +9,35 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { sendSMS } from '../lib/notify.js'
 
 const sb = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY // use service role key in Vercel env vars
+  process.env.SUPABASE_SERVICE_KEY
 )
+
+async function autoSendDocuments(lead, triggerEvent) {
+  try {
+    const { data: docs } = await sb.from('documents')
+      .select('*')
+      .eq('trigger_event', triggerEvent)
+      .eq('is_active', true)
+    for (const doc of docs || []) {
+      if (doc.course && lead.course_interest && !lead.course_interest.toLowerCase().includes(doc.course.toLowerCase())) continue
+      // Fire-and-forget — don't block webhook response
+      fetch(`${process.env.APP_URL || 'https://cce-erp.vercel.app'}/api/documents/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          document_id: doc.id,
+          lead_id: lead.id,
+          channels: ['email', 'whatsapp'],
+          context: { name: lead.name, course: lead.course_interest },
+        }),
+      }).catch(e => console.error('Auto-doc send error:', e))
+    }
+  } catch (e) { console.error('autoSendDocuments error:', e) }
+}
 
 export default async function handler(req, res) {
   // ── Webhook Verification (GET) ──────────────────────────────────────────
@@ -85,9 +109,12 @@ export default async function handler(req, res) {
 
           if (!newLead) continue
 
-          // Notify all PMs
+          // Auto-send documents configured for lead_created trigger
+          autoSendDocuments(newLead, 'lead_created')
+
+          // Notify all PMs (in-app + SMS)
           const { data: pms } = await sb.from('staff')
-            .select('id').in('role', ['pm', 'admin']).eq('is_active', true)
+            .select('id, phone').in('role', ['pm', 'admin']).eq('is_active', true)
 
           for (const pm of pms || []) {
             await sb.from('notifications').insert({
@@ -97,6 +124,14 @@ export default async function handler(req, res) {
               type: 'new_lead',
               lead_id: newLead.id,
             })
+            if (pm.phone) {
+              await sendSMS({
+                phone: pm.phone,
+                message: `New Facebook Lead! ${name}${phone ? ' — ' + phone : ''}${course ? ' (' + course + ')' : ''}. Login to CCE ERP to assign.`,
+                leadId: newLead.id,
+                type: 'new_lead',
+              })
+            }
           }
         } catch (err) {
           console.error('Error processing FB lead:', err)

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON, STATUS, SOURCES, ROLES, WA_ASSIGN_MSG, WA_REG_MSG } from '@/lib/constants'
-import { formatPhone, timeAgo, fmtCurrency, fmtDate, marketerRegLink, sendSMS } from '@/lib/helpers'
-import { Avatar, Badge, Modal, StatCard, EmptyState, Spinner, Label, ProgressBar, Icon } from '@/components/ui'
+import { formatPhone, timeAgo, fmtCurrency, fmtDate, marketerRegLink, sendSMS, leadScore } from '@/lib/helpers'
+import { Avatar, Badge, Modal, EmptyState, Spinner, Label, Icon, ScoreBadge } from '@/components/ui'
 import Analytics from '@/pages/Analytics'
 import Finance from '@/pages/Finance'
 import Admission from '@/pages/Admission'
@@ -10,6 +10,16 @@ import RegisterPage from '@/pages/RegisterPage'
 import CohortManager from '@/pages/CohortManager'
 import InstructorDashboard from '@/pages/InstructorDashboard'
 import AttendPage from '@/pages/AttendPage'
+import Pipeline from '@/pages/Pipeline'
+import BulkSMS from '@/pages/BulkSMS'
+import CalendarView from '@/pages/CalendarView'
+import Reports from '@/pages/Reports'
+import LeadImport from '@/pages/LeadImport'
+import MarketerTargets from '@/pages/MarketerTargets'
+import Documents from '@/pages/Documents'
+import Dashboard from '@/pages/Dashboard'
+import LeadDetail from '@/pages/LeadDetail'
+import CommandPalette from '@/components/CommandPalette'
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
@@ -37,12 +47,64 @@ function ERP() {
   const [selectedLead, setSelectedLead] = useState(null)
   const [showNotifs, setShowNotifs] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [toast, setToast] = useState(null)   // { msg, type }
+  const [showPalette, setShowPalette] = useState(false)
+  const [autoAssignWA, setAutoAssignWA] = useState(null) // [{lead, marketer, phone, waMsg}]
+  const realtimeRef = useRef(null)
+
+  const showToast = (msg, type = 'info') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4000)
+  }
 
   useEffect(() => {
     const saved = sessionStorage.getItem('cce_user')
     if (saved) { const u = JSON.parse(saved); setUser(u); loadAll(u) }
     else loadStaff()
   }, [])
+
+  // ── Ctrl+K Command Palette ─────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowPalette(p => !p) }
+      if (e.key === 'Escape') setShowPalette(false)
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  // ── Supabase Realtime ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return
+    // Clean up any previous channel
+    if (realtimeRef.current) sb.removeChannel(realtimeRef.current)
+
+    const channel = sb
+      .channel('cce-realtime-' + user.id)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `staff_id=eq.${user.id}` },
+        (payload) => {
+          setNotifications(prev => [payload.new, ...prev])
+          showToast(payload.new.message || payload.new.title, 'info')
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'leads' },
+        (payload) => {
+          const isPMRole = user.role === 'pm' || user.role === 'admin'
+          if (isPMRole) {
+            setLeads(prev => [{ ...payload.new, assignee: null }, ...prev])
+            showToast(`New lead: ${payload.new.name} (${payload.new.source})`, 'new_lead')
+          }
+        }
+      )
+      .subscribe()
+
+    realtimeRef.current = channel
+    return () => { sb.removeChannel(channel); realtimeRef.current = null }
+  }, [user?.id])
 
   const loadStaff = async () => {
     const { data } = await sb.from('staff').select('*').eq('is_active', true).order('name')
@@ -81,21 +143,36 @@ function ERP() {
     const lead = leads.find(l => l.id === leadId)
     if (!marketer || !lead) return
 
+    const course = lead.course_interest || ''
     await sb.from('leads').update({ assigned_to: marketerId, assigned_at: new Date().toISOString(), status: 'assigned', updated_at: new Date().toISOString() }).eq('id', leadId)
-    await sb.from('notifications').insert({ staff_id: marketerId, title: 'New Lead Assigned', message: `${lead.name} assigned to you by ${user.name}`, type: 'assignment', lead_id: leadId })
+    await sb.from('notifications').insert({
+      staff_id: marketer.id,
+      title: '📋 New Lead Assigned to You',
+      message: `${lead.name}${lead.phone ? ' · ' + lead.phone : ''}${course ? ' · ' + course : ''} — assigned by ${user.name}`,
+      type: 'assignment',
+      lead_id: leadId,
+    })
     await sb.from('lead_comments').insert({ lead_id: leadId, staff_id: user.id, staff_name: user.name, comment: `Assigned to ${marketer.name}`, status_change: 'assigned' })
 
     const phone = formatPhone(lead.phone)
     if (phone) {
-      // Auto-send SMS via Arkesel
-      const smsMsg = `Hello ${lead.name.split(' ')[0]}! Thank you for your interest in Cambridge Center of Excellence.\n\n${marketer.name} from our admissions team will be reaching out to you shortly to guide you through your enrollment journey.\n\nWe offer world-class professional courses (Online & In-Person) with scholarship opportunities.\n\nCambridge Center of Excellence`
+      const firstName = lead.name.split(' ')[0]
+      const smsMsg = `Hi ${firstName}! This is Cambridge Center of Excellence. Thank you for your interest${course ? ' in ' + course : ''}. ${marketer.name.split(' ')[0]} will call you shortly. Cambridge Centre of Excellence`
       await sendSMS(phone, smsMsg)
 
-      // Also open WhatsApp for detailed message
-      const msg = WA_ASSIGN_MSG(lead.name, marketer.name)
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank')
-      await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: lead.phone, message: smsMsg, marketer_name: marketer.name, status: 'sent' })
+      // Open WhatsApp with personalised pre-filled message (in marketer's name)
+      const waMsg = WA_ASSIGN_MSG(lead.name, marketer.name, course)
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`, '_blank')
+      await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: lead.phone, message: waMsg, marketer_name: marketer.name, status: 'sent' })
       await sb.from('leads').update({ whatsapp_sent: true, whatsapp_sent_at: new Date().toISOString() }).eq('id', leadId)
+    }
+
+    // Also notify the marketer via SMS if they have a phone
+    if (marketer.phone) {
+      await sendSMS(
+        formatPhone(marketer.phone),
+        `CCE: New lead assigned to you — ${lead.name}${lead.phone ? ', ' + lead.phone : ''}${course ? ' (' + course + ')' : ''}. Login to follow up. Cambridge Centre of Excellence`
+      )
     }
     await loadAll(user)
   }
@@ -138,6 +215,56 @@ function ERP() {
     const pms = staff.filter(s => s.role === 'pm' || s.role === 'admin')
     for (const pm of pms) await sb.from('notifications').insert({ staff_id: pm.id, title: 'New Personal Lead', message: `${user.name} added a personal lead: ${data.name}`, type: 'new_lead', lead_id: inserted?.id })
     await loadAll(user)
+  }
+
+  const autoAssign = async () => {
+    const unassigned = leads.filter(l => !l.assigned_to && l.status === 'new')
+    const marketers = staff.filter(s => s.role === 'marketer')
+    if (!unassigned.length || !marketers.length) return showToast(unassigned.length ? 'No marketers to assign to' : 'No unassigned leads', 'info')
+
+    const counts = marketers.map(m => ({ ...m, count: leads.filter(l => l.assigned_to === m.id).length }))
+      .sort((a, b) => a.count - b.count)
+
+    const waQueue = [] // collect WA links to send after loop
+
+    for (let i = 0; i < unassigned.length; i++) {
+      const marketer = counts[i % counts.length]
+      const lead = unassigned[i]
+      const course = lead.course_interest || ''
+
+      await sb.from('leads').update({ assigned_to: marketer.id, assigned_at: new Date().toISOString(), status: 'assigned', updated_at: new Date().toISOString() }).eq('id', lead.id)
+      await sb.from('notifications').insert({
+        staff_id: marketer.id,
+        title: '📋 New Lead Assigned to You',
+        message: `${lead.name}${lead.phone ? ' · ' + lead.phone : ''}${course ? ' · ' + course : ''} — auto-assigned`,
+        type: 'assignment',
+        lead_id: lead.id,
+      })
+
+      if (lead.phone) {
+        const phone = formatPhone(lead.phone)
+        const smsMsg = `Hi ${lead.name.split(' ')[0]}! This is Cambridge Center of Excellence. Thank you for your interest${course ? ' in ' + course : ''}. ${marketer.name.split(' ')[0]} will call you shortly. Cambridge Centre of Excellence`
+        await sendSMS(phone, smsMsg)
+        const waMsg = WA_ASSIGN_MSG(lead.name, marketer.name, course)
+        waQueue.push({ lead, marketer, phone, waMsg })
+        await sb.from('leads').update({ whatsapp_sent: false }).eq('id', lead.id) // mark pending WA
+      }
+
+      // SMS the marketer too
+      if (marketer.phone) {
+        await sendSMS(
+          formatPhone(marketer.phone),
+          `CCE: New lead — ${lead.name}${lead.phone ? ', ' + lead.phone : ''}${course ? ' (' + course + ')' : ''}. Login to follow up. Cambridge Centre of Excellence`
+        )
+      }
+
+      counts[i % counts.length].count++
+    }
+
+    await loadAll(user)
+    // Show WA batch modal so PM can send WA messages one-by-one
+    if (waQueue.length) setAutoAssignWA(waQueue)
+    else showToast(`${unassigned.length} leads auto-assigned`, 'info')
   }
 
   const markNotifRead = async (id) => {
@@ -200,18 +327,25 @@ function ERP() {
 
   // ── Nav Items per role ──────────────────────────────────────────────────
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Icon.dashboard, roles: 'all' },
-    { id: 'leads', label: 'Leads', count: myLeads.length, icon: Icon.leads, roles: 'all' },
-    { id: 'add', label: 'Add Lead', icon: Icon.add, roles: ['pm','admin','marketer','receptionist'] },
-    { id: 'my_leads', label: 'My Leads', icon: Icon.target, roles: ['marketer'] },
-    { id: 'analytics', label: 'Analytics', icon: Icon.analytics, roles: 'all' },
-    { id: 'finance', label: 'Finance', icon: Icon.finance, roles: ['pm','admin','finance'] },
-    { id: 'admission', label: 'Admissions', icon: Icon.admission, roles: ['pm','admin','admission'] },
-    { id: 'classes', label: 'Classes', icon: Icon.courses, roles: ['pm','admin'] },
-    { id: 'instructor', label: 'My Classes', icon: Icon.courses, roles: ['instructor'] },
-    { id: 'staff', label: 'Staff', icon: Icon.staff, roles: ['pm','admin'] },
-    { id: 'courses', label: 'Courses', icon: Icon.courses, roles: ['pm','admin'] },
-    { id: 'integrations', label: 'Integrations', icon: Icon.integrations, roles: ['pm','admin'] },
+    { id: 'dashboard',    label: 'Dashboard',    icon: Icon.dashboard,    roles: 'all' },
+    { id: 'leads',        label: 'Leads',         count: myLeads.length, icon: Icon.leads, roles: 'all' },
+    { id: 'pipeline',     label: 'Pipeline',      icon: Icon.pipeline,     roles: 'all' },
+    { id: 'add',          label: 'Add Lead',      icon: Icon.add,          roles: ['pm','admin','marketer','receptionist'] },
+    { id: 'my_leads',     label: 'My Leads',      icon: Icon.target,       roles: ['marketer'] },
+    { id: 'analytics',    label: 'Analytics',     icon: Icon.analytics,    roles: 'all' },
+    { id: 'calendar',     label: 'Calendar',      icon: Icon.calendar,     roles: ['pm','admin','marketer'] },
+    { id: 'finance',      label: 'Finance',       icon: Icon.finance,      roles: ['pm','admin','finance'] },
+    { id: 'admission',    label: 'Admissions',    icon: Icon.admission,    roles: ['pm','admin','admission'] },
+    { id: 'bulk_sms',     label: 'Bulk SMS',      icon: Icon.bulksms,      roles: ['pm','admin'] },
+    { id: 'reports',      label: 'Reports',       icon: Icon.reports,      roles: ['pm','admin'] },
+    { id: 'import',       label: 'Import Leads',  icon: Icon.import,       roles: ['pm','admin'] },
+    { id: 'targets',      label: 'Targets',       icon: Icon.targets,      roles: ['pm','admin'] },
+    { id: 'documents',    label: 'Documents',     icon: Icon.docs,         roles: ['pm','admin'] },
+    { id: 'classes',      label: 'Classes',       icon: Icon.courses,      roles: ['pm','admin'] },
+    { id: 'instructor',   label: 'My Classes',    icon: Icon.courses,      roles: ['instructor'] },
+    { id: 'staff',        label: 'Staff',         icon: Icon.staff,        roles: ['pm','admin'] },
+    { id: 'courses',      label: 'Courses',       icon: Icon.courses,      roles: ['pm','admin'] },
+    { id: 'integrations', label: 'Integrations',  icon: Icon.integrations, roles: ['pm','admin'] },
   ].filter(item => item.roles === 'all' || item.roles.includes(user?.role))
 
   // ── Layout ──────────────────────────────────────────────────────────────
@@ -260,6 +394,15 @@ function ERP() {
               </span>
             ) : navItems.find(n => n.id === page)?.label || 'Dashboard'}
           </div>
+          <button
+            onClick={() => setShowPalette(true)}
+            className="hidden md:flex items-center gap-2 h-8 px-3 bg-slate-100 hover:bg-slate-200 transition rounded-lg text-xs text-slate-400"
+          >
+            {Icon.dashboard && null}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span>Search…</span>
+            <kbd className="text-[9px] bg-white border border-slate-200 rounded px-1 font-mono ml-1">⌘K</kbd>
+          </button>
           <div className="relative">
             <button onClick={() => setShowNotifs(!showNotifs)}
               className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 transition text-slate-500">
@@ -300,154 +443,99 @@ function ERP() {
         <main className="flex-1 p-4 md:p-6">
           {loading ? <Spinner size={24}/> : (
             <>
-              {page === 'dashboard'    && <Dashboard user={user} isPM={isPM} isMarketer={isMarketer} leads={leads} myLeads={myLeads} staff={staff} nav={nav}/>}
+              {page === 'dashboard'    && <Dashboard user={user} isPM={isPM} isMarketer={isMarketer} leads={leads} myLeads={myLeads} staff={staff} nav={nav} onAutoAssign={autoAssign}/>}
               {page === 'leads'        && !selectedLead && <LeadList leads={myLeads} isPM={isPM} staff={staff} onSelect={l => { setSelectedLead(l) }}/>}
               {page === 'leads'        && selectedLead && <LeadDetail lead={selectedLead} staff={staff} user={user} isPM={isPM} isMarketer={isMarketer} sb={sb} onAssign={assignLead} onStatusChange={updateStatus} onRegLink={sendRegLink} onRefresh={() => loadAll(user)}/>}
+              {page === 'pipeline'     && <Pipeline leads={myLeads} isPM={isPM} onStatusChange={updateStatus} onSelect={l => nav('leads', l)}/>}
               {page === 'my_leads'     && <MyLeads leads={myLeads} user={user} staff={staff} onSelect={l => { setSelectedLead(l); setPage('leads') }} onAddPersonal={() => nav('add_personal')} nav={nav}/>}
               {page === 'add'          && <AddLead courses={courses} onSubmit={addLead} onDone={() => nav('leads')} isPM={isPM}/>}
               {page === 'add_personal' && <AddLead courses={courses} onSubmit={addPersonalLead} onDone={() => nav('my_leads')} personal/>}
               {page === 'analytics'    && <Analytics leads={leads} staff={staff} user={user} isPM={isPM}/>}
+              {page === 'calendar'     && <CalendarView leads={myLeads} sb={sb}/>}
               {page === 'finance'      && <Finance sb={sb} staff={staff} leads={leads} user={user}/>}
               {page === 'admission'    && <Admission sb={sb} staff={staff} leads={leads} user={user}/>}
+              {page === 'bulk_sms'     && isPM && <BulkSMS leads={leads} staff={staff} sb={sb} user={user}/>}
+              {page === 'reports'      && isPM && <Reports leads={leads} staff={staff} sb={sb}/>}
+              {page === 'import'       && isPM && <LeadImport sb={sb} leads={leads} user={user} onDone={() => { loadAll(user); nav('leads') }}/>}
+              {page === 'targets'      && isPM && <MarketerTargets sb={sb} staff={staff} leads={leads}/>}
+              {page === 'documents'    && isPM && <Documents sb={sb} user={user} leads={leads}/>}
               {page === 'staff'        && isPM && <StaffManager staff={staff} sb={sb} onRefresh={() => loadAll(user)}/>}
               {page === 'courses'      && isPM && <CourseManager courses={courses} sb={sb} onRefresh={() => loadAll(user)}/>}
               {page === 'integrations' && isPM && <Integrations sb={sb}/>}
               {page === 'classes'      && isPM && <CohortManager sb={sb} staff={staff} courses={courses} user={user}/>}
-              {page === 'instructor'  && user?.role === 'instructor' && <InstructorDashboard sb={sb} user={user}/>}
+              {page === 'instructor'   && user?.role === 'instructor' && <InstructorDashboard sb={sb} user={user}/>}
             </>
           )}
         </main>
       </div>
-    </div>
-  )
-}
 
-// ─── Dashboard ─────────────────────────────────────────────────────────────────
-function Dashboard({ user, isPM, isMarketer, leads, myLeads, staff, nav }) {
-  const data = isPM ? leads : myLeads
-  const now = new Date()
-  const thisMonth = data.filter(l => {
-    const d = new Date(l.created_at)
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-  })
-  const registered = data.filter(l => l.status === 'registered')
-  const convRate = data.length ? Math.round((registered.length / data.length) * 100) : 0
+      {/* Command Palette */}
+      {showPalette && (
+        <CommandPalette
+          leads={leads}
+          staff={staff}
+          nav={(p, lead) => { nav(p, lead); setShowPalette(false) }}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
 
-  const stats = [
-    { label: 'Total Leads', value: data.length, icon: '👥', sub: `${thisMonth.length} this month` },
-    { label: 'Registered', value: registered.length, icon: '🎓', color: 'text-emerald-600', sub: `${convRate}% conversion` },
-    { label: 'Follow Up', value: data.filter(l => l.status === 'follow_up').length, icon: '📞', color: 'text-amber-600' },
-    { label: 'Pending Reg.', value: data.filter(l => l.status === 'pending_registration').length, icon: '⏳', color: 'text-orange-600' },
-    ...(isPM ? [
-      { label: 'Unassigned', value: leads.filter(l => !l.assigned_to).length, icon: '⚠️', color: 'text-red-500' },
-      { label: 'Not Qualified', value: data.filter(l => l.status === 'not_qualified').length, icon: '✗', color: 'text-red-500' },
-    ] : [
-      { label: 'My Conversion', value: `${convRate}%`, icon: '🎯', color: convRate >= 30 ? 'text-emerald-600' : 'text-amber-600' },
-      { label: 'Personal Leads', value: myLeads.filter(l => l.source === 'personal').length, icon: '💼', color: 'text-violet-600' },
-    ]),
-  ]
-
-  const marketers = isPM ? staff.filter(s => s.role === 'marketer').map(m => ({
-    ...m,
-    total: leads.filter(l => l.assigned_to === m.id).length,
-    registered: leads.filter(l => l.assigned_to === m.id && l.status === 'registered').length,
-  })).sort((a, b) => b.registered - a.registered) : []
-
-  const sources = SOURCES.map(s => ({ label: s, value: data.filter(l => l.source === s).length })).filter(s => s.value > 0)
-
-  return (
-    <div className="fade-up space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">Good {new Date().getHours() < 12 ? 'morning' : 'afternoon'}, {user.name.split(' ')[0]} 👋</h1>
-        <p className="text-sm text-slate-400 mt-0.5">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map(s => <StatCard key={s.label} {...s}/>)}
-      </div>
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 card overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Recent Leads</h2>
-            <button onClick={() => nav('leads')} className="text-xs text-blue-600 font-medium">View all →</button>
-          </div>
-          <div className="divide-y divide-slate-50">
-            {(isPM ? leads : myLeads).slice(0, 8).map(l => (
-              <div key={l.id} onClick={() => nav('leads', l)} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition">
-                <Avatar name={l.name} size={32}/>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-slate-900">{l.name}</div>
-                  <div className="text-[11px] text-slate-400">{l.phone} · {l.assignee?.name || 'Unassigned'}</div>
+      {/* Auto-assign WhatsApp batch modal */}
+      {autoAssignWA && (
+        <div className="fixed inset-0 z-[150] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="p-5 border-b border-slate-100">
+              <h2 className="font-bold text-slate-900">Send WhatsApp Messages</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {autoAssignWA.length} lead{autoAssignWA.length > 1 ? 's' : ''} assigned · SMS sent automatically · Click each to open WhatsApp
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+              {autoAssignWA.map(({ lead, marketer, phone, waMsg }, i) => (
+                <div key={lead.id} className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">{lead.name}</div>
+                    <div className="text-xs text-slate-400">{lead.phone} {lead.course_interest ? `· ${lead.course_interest}` : ''}</div>
+                    <div className="text-[11px] text-violet-600 mt-0.5">→ {marketer.name}</div>
+                  </div>
+                  <a
+                    href={`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`}
+                    target="_blank" rel="noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition press">
+                    💬 WhatsApp
+                  </a>
                 </div>
-                <div className="text-right shrink-0"><Badge status={l.status}/><div className="text-[10px] text-slate-300 mt-1">{timeAgo(l.created_at)}</div></div>
-              </div>
-            ))}
-            {(isPM ? leads : myLeads).length === 0 && <EmptyState title="No leads yet" icon="📋" action={<button onClick={() => nav('add')} className="btn btn-primary btn-sm">Add Lead</button>}/>}
+              ))}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex gap-2">
+              <button onClick={() => {
+                autoAssignWA.forEach(({ phone, waMsg }) =>
+                  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`, '_blank')
+                )
+              }} className="flex-1 btn text-xs h-9 bg-emerald-600 text-white hover:bg-emerald-700 border-0 press font-semibold">
+                Open All ({autoAssignWA.length})
+              </button>
+              <button onClick={() => { setAutoAssignWA(null); showToast(`${autoAssignWA.length} leads auto-assigned`, 'info') }}
+                className="flex-1 btn text-xs h-9 bg-slate-100 text-slate-700 border-0 press">
+                Done
+              </button>
+            </div>
           </div>
         </div>
-        <div className="space-y-4">
-          {sources.length > 0 && (
-            <div className="card p-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Lead Sources</h2>
-              <div className="space-y-2">
-                {sources.map(s => (
-                  <div key={s.label} className="flex items-center gap-2">
-                    <div className="text-[11px] text-slate-500 w-16 capitalize">{s.label}</div>
-                    <ProgressBar value={s.value} max={data.length}/>
-                    <div className="text-[11px] font-bold text-slate-700 w-5 text-right">{s.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {isPM && marketers.length > 0 && (
-            <div className="card p-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Marketer Leaderboard</h2>
-              <div className="space-y-2.5">
-                {marketers.slice(0, 5).map((m, i) => (
-                  <div key={m.id} className="flex items-center gap-2.5">
-                    <div className="text-[10px] text-slate-300 w-3 font-bold">{i+1}</div>
-                    <Avatar name={m.name} size={26}/>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-slate-700 truncate">{m.name}</div>
-                      <div className="text-[10px] text-slate-400">{m.total} leads</div>
-                    </div>
-                    <div className="text-xs font-bold text-emerald-600">{m.registered} 🎓</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {isPM && leads.filter(l => !l.assigned_to).length > 0 && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
-              <div className="text-xs font-bold text-amber-800 mb-1">⚠️ Unassigned Leads</div>
-              <div className="text-xl font-bold text-amber-900">{leads.filter(l => !l.assigned_to).length}</div>
-              <div className="text-[11px] text-amber-600 mb-2">leads need assignment</div>
-              <button onClick={() => nav('leads')} className="text-[11px] font-semibold text-amber-800 underline">Assign now →</button>
-            </div>
-          )}
-          {isMarketer && (
-            <div className="card p-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">My Pipeline</h2>
-              <div className="space-y-2">
-                {['assigned','contacted','follow_up','pending_registration','registered'].map(s => {
-                  const count = myLeads.filter(l => l.status === s).length
-                  if (!count) return null
-                  return (
-                    <div key={s} className="flex items-center gap-2">
-                      <Badge status={s} className="w-28 justify-center shrink-0"/>
-                      <ProgressBar value={count} max={myLeads.length}/>
-                      <span className="text-xs font-bold text-slate-700 w-4 text-right">{count}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+      )}
+
+      {/* Realtime toast */}
+      {toast && (
+        <div className={`fixed bottom-4 right-4 z-[200] max-w-xs px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-2 fade-up
+          ${toast.type === 'new_lead' ? 'bg-blue-600' : 'bg-slate-800'}`}>
+          <div className="live-dot mt-1.5 shrink-0"/>
+          <div className="flex-1 min-w-0 leading-snug">{toast.msg}</div>
+          <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100 ml-1 shrink-0">✕</button>
         </div>
-      </div>
+      )}
     </div>
   )
 }
+
 
 // ─── Lead List ─────────────────────────────────────────────────────────────────
 function LeadList({ leads, isPM, staff, onSelect }) {
@@ -495,7 +583,7 @@ function LeadList({ leads, isPM, staff, onSelect }) {
       <div className="card overflow-hidden">
         {filtered.length === 0 ? <EmptyState icon="📋" title="No leads match your filters"/> : (
           <table className="data-table">
-            <thead><tr><th>Name</th><th className="hidden sm:table-cell">Phone</th><th>Status</th><th className="hidden md:table-cell">Source</th><th className="hidden lg:table-cell">Course</th><th className="hidden md:table-cell">Marketer</th><th className="hidden lg:table-cell">Date</th></tr></thead>
+            <thead><tr><th>Name</th><th className="hidden sm:table-cell">Phone</th><th>Status</th><th className="hidden md:table-cell">Score</th><th className="hidden md:table-cell">Source</th><th className="hidden lg:table-cell">Course</th><th className="hidden md:table-cell">Marketer</th><th className="hidden lg:table-cell">Date</th></tr></thead>
             <tbody>
               {filtered.map(l => (
                 <tr key={l.id} onClick={() => onSelect(l)}>
@@ -513,6 +601,7 @@ function LeadList({ leads, isPM, staff, onSelect }) {
                   </td>
                   <td className="hidden sm:table-cell text-slate-500 text-xs">{l.phone}</td>
                   <td><Badge status={l.status}/></td>
+                  <td className="hidden md:table-cell"><ScoreBadge score={leadScore(l)}/></td>
                   <td className="hidden md:table-cell"><span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded capitalize">{l.source}</span></td>
                   <td className="hidden lg:table-cell text-slate-500 text-xs max-w-[140px] truncate">{l.course_interest || '—'}</td>
                   <td className="hidden md:table-cell">
@@ -609,219 +698,6 @@ function MyLeads({ leads, user, staff, onSelect, nav }) {
   )
 }
 
-// ─── Lead Detail ───────────────────────────────────────────────────────────────
-function LeadDetail({ lead, staff, user, isPM, isMarketer, sb, onAssign, onStatusChange, onRegLink, onRefresh }) {
-  const [comments, setComments] = useState([])
-  const [newComment, setNewComment] = useState('')
-  const [newStatus, setNewStatus] = useState(lead.status)
-  const [posting, setPosting] = useState(false)
-  const [assigning, setAssigning] = useState(null)
-  const [editMode, setEditMode] = useState(false)
-  const [editData, setEditData] = useState({ name: lead.name, phone: lead.phone, email: lead.email, notes: lead.notes, city: lead.city })
-  const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    sb.from('lead_comments').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true })
-      .then(({ data }) => setComments(data || []))
-  }, [lead.id])
-
-  const addComment = async () => {
-    if (!newComment.trim()) return
-    setPosting(true)
-    const statusChanged = newStatus !== lead.status
-    await onStatusChange(lead.id, statusChanged ? newStatus : lead.status, newComment.trim())
-    setNewComment('')
-    const { data } = await sb.from('lead_comments').select('*').eq('lead_id', lead.id).order('created_at', { ascending: true })
-    setComments(data || [])
-    await onRefresh()
-    setPosting(false)
-  }
-
-  const handleAssign = async (mid) => { setAssigning(mid); await onAssign(lead.id, mid); setAssigning(null) }
-
-  const saveEdit = async () => {
-    await sb.from('leads').update({ ...editData, updated_at: new Date().toISOString() }).eq('id', lead.id)
-    await onRefresh(); setEditMode(false)
-  }
-
-  const copyRegLink = () => {
-    const link = marketerRegLink(lead.assigned_to, lead.id)
-    navigator.clipboard.writeText(link)
-    setCopied(true); setTimeout(() => setCopied(false), 2000)
-  }
-
-  const marketers = staff.filter(s => s.role === 'marketer')
-  const phone = formatPhone(lead.phone)
-  const regLink = lead.assigned_to ? marketerRegLink(lead.assigned_to, lead.id) : null
-
-  return (
-    <div className="fade-up">
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          {/* Header */}
-          <div className="card p-5">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Avatar name={lead.name} size={44}/>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">{lead.name}</h2>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <Badge status={lead.status}/>
-                    {lead.whatsapp_sent && <span className="badge bg-green-50 text-green-600">WA Sent</span>}
-                    {lead.scholarship_interest && <span className="badge bg-purple-50 text-purple-600">Scholarship</span>}
-                    {lead.source === 'personal' && <span className="badge bg-violet-50 text-violet-600">Personal Lead</span>}
-                  </div>
-                </div>
-              </div>
-              <button onClick={() => setEditMode(!editMode)} className="btn btn-ghost btn-sm">{Icon.edit} Edit</button>
-            </div>
-            {editMode ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2"><Label>Full Name</Label><input value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="inp"/></div>
-                <div><Label>Phone</Label><input value={editData.phone||''} onChange={e => setEditData({...editData, phone: e.target.value})} className="inp"/></div>
-                <div><Label>Email</Label><input value={editData.email||''} onChange={e => setEditData({...editData, email: e.target.value})} className="inp"/></div>
-                <div><Label>City</Label><input value={editData.city||''} onChange={e => setEditData({...editData, city: e.target.value})} className="inp"/></div>
-                <div className="col-span-2"><Label>Notes</Label><textarea value={editData.notes||''} onChange={e => setEditData({...editData, notes: e.target.value})} className="inp" rows="2"/></div>
-                <div className="col-span-2 flex gap-2">
-                  <button onClick={saveEdit} className="btn btn-primary btn-sm">{Icon.check} Save</button>
-                  <button onClick={() => setEditMode(false)} className="btn btn-ghost btn-sm">Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 text-sm">
-                {[
-                  { label: 'Phone', value: lead.phone },
-                  { label: 'Email', value: lead.email || '—' },
-                  { label: 'City', value: lead.city || '—' },
-                  { label: 'Source', value: lead.source },
-                  { label: 'Course', value: lead.course_interest || '—' },
-                  { label: 'Mode', value: lead.mode_preference || '—' },
-                  { label: 'Assigned To', value: lead.assignee?.name || 'Unassigned' },
-                  { label: 'Created', value: fmtDate(lead.created_at) },
-                  { label: 'Updated', value: timeAgo(lead.updated_at) },
-                ].map(f => (
-                  <div key={f.label}>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">{f.label}</div>
-                    <div className="font-medium text-slate-700 capitalize">{f.value}</div>
-                  </div>
-                ))}
-                {lead.notes && <div className="col-span-2 md:col-span-3"><div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Notes</div><div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{lead.notes}</div></div>}
-              </div>
-            )}
-          </div>
-
-          {/* Activity */}
-          <div className="card p-5">
-            <h3 className="text-sm font-bold text-slate-900 mb-4">Activity Log</h3>
-            <div className="bg-slate-50 rounded-xl p-4 mb-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="inp h-9 text-xs w-auto">
-                  {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-                {newStatus !== lead.status && <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-2 py-1 rounded">Status will change</span>}
-              </div>
-              <div className="flex gap-2">
-                <input value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()}
-                  placeholder="Add a note or update…" className="inp flex-1 text-sm"/>
-                <button onClick={addComment} disabled={!newComment.trim() || posting} className="btn btn-primary press">{posting ? '…' : 'Post'}</button>
-              </div>
-            </div>
-            <div className="space-y-4">
-              {comments.length === 0 ? <p className="text-xs text-slate-300 text-center py-6">No activity yet.</p> :
-                comments.map(c => (
-                  <div key={c.id} className="flex gap-3">
-                    <Avatar name={c.staff_name} size={28}/>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-slate-800">{c.staff_name}</span>
-                        {c.status_change && <Badge status={c.status_change}/>}
-                        <span className="text-[10px] text-slate-300 ml-auto">{timeAgo(c.created_at)}</span>
-                      </div>
-                      <div className="text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{c.comment}</div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-4">
-          {/* Quick actions */}
-          <div className="card p-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h3>
-            <div className="space-y-1.5">
-              {lead.phone && <>
-                <a href={`tel:${lead.phone}`} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
-                  <span className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">{Icon.phone}</span>Call {lead.phone}
-                </a>
-                <a href={`https://wa.me/${phone}?text=${encodeURIComponent(WA_ASSIGN_MSG(lead.name, lead.assignee?.name || 'CCE'))}`} target="_blank" rel="noopener"
-                  className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
-                  <span className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center text-green-600">{Icon.wa}</span>WhatsApp
-                </a>
-              </>}
-              {lead.email && <a href={`mailto:${lead.email}`} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
-                <span className="w-7 h-7 bg-violet-50 rounded-lg flex items-center justify-center text-violet-600">{Icon.mail}</span>Email
-              </a>}
-            </div>
-          </div>
-
-          {/* Registration link */}
-          {(isPM || isMarketer) && lead.assigned_to && lead.status !== 'registered' && (
-            <div className="card p-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Registration Link</h3>
-              <p className="text-[10px] text-slate-400 mb-3">Send this unique link to the lead to complete registration & payment.</p>
-              {regLink && (
-                <div className="bg-slate-50 rounded-lg p-2 mb-3">
-                  <div className="text-[10px] font-mono text-slate-500 truncate">{regLink}</div>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button onClick={() => onRegLink(lead)}
-                  className="btn btn-primary flex-1 btn-sm">
-                  {Icon.wa} Send via WA
-                </button>
-                <button onClick={copyRegLink} className="btn btn-ghost btn-sm">
-                  {copied ? Icon.check : Icon.copy}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Registered info */}
-          {lead.status === 'registered' && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-              <div className="text-xs font-bold text-emerald-800 mb-2">🎓 Registered & Paid</div>
-              {lead.reg_fee_paid && <div className="text-lg font-bold text-emerald-700">{fmtCurrency(lead.reg_fee_paid)}</div>}
-              <div className="text-[11px] text-emerald-600">{fmtDate(lead.reg_paid_at)}</div>
-            </div>
-          )}
-
-          {/* Assign (PM only) */}
-          {isPM && (
-            <div className="card p-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Assign to Marketer</h3>
-              <p className="text-[10px] text-slate-400 mb-3">Auto-sends WhatsApp intro to the lead on assignment.</p>
-              {marketers.length === 0 ? <p className="text-xs text-slate-300 text-center py-4">No marketers added yet.</p> : (
-                <div className="space-y-1.5">
-                  {marketers.map(m => (
-                    <button key={m.id} onClick={() => handleAssign(m.id)} disabled={assigning === m.id}
-                      className={`w-full flex items-center gap-2.5 p-2.5 rounded-lg text-left transition press ${lead.assigned_to === m.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50 border border-transparent'}`}>
-                      <Avatar name={m.name} size={28}/>
-                      <span className="flex-1 text-sm font-medium text-slate-700">{m.name}</span>
-                      {assigning === m.id && <div className="w-3 h-3 border border-slate-300 border-t-blue-600 rounded-full animate-spin"/>}
-                      {lead.assigned_to === m.id && <span className="text-[10px] text-blue-600 font-bold">Current</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Add Lead ──────────────────────────────────────────────────────────────────
 function AddLead({ courses, onSubmit, onDone, isPM = false, personal = false }) {

@@ -1,129 +1,115 @@
 /**
  * CCE ERP — Unified Notification Sender
- * Sends via: SMS (Arkesel), WhatsApp (WABA or wa.me log), Email (SendGrid)
+ * Single source of truth for all outbound messages.
  *
  * Usage:
- *   import { sendSMS, sendWA, sendEmail, sendAll } from './notify.js'
+ *   import { sendSMS, sendWA, sendEmail } from '../lib/notify.js'
+ *
+ *   await sendSMS({ phone, message, leadId?, type? })
+ *   await sendWA({ phone, message, leadId?, type? })
+ *   await sendEmail({ toEmail, toName, subject, html, text?, attachments?, leadId?, type? })
  */
 
 import { createClient } from '@supabase/supabase-js'
+
 const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
-const ARKESEL_KEY   = process.env.ARKESEL_API_KEY
-const ARKESEL_FROM  = process.env.ARKESEL_SENDER_ID || 'CCE-Ghana'
+const ARKESEL_KEY  = process.env.ARKESEL_API_KEY
+const ARKESEL_FROM = 'Cambridge'
 const WABA_TOKEN    = process.env.WABA_TOKEN
 const WABA_PHONE_ID = process.env.WABA_PHONE_ID
 const SENDGRID_KEY  = process.env.SENDGRID_API_KEY
-const SENDGRID_FROM = process.env.SENDGRID_FROM_EMAIL || 'info@cambridgecoe.edu.gh'
+const SENDGRID_FROM = process.env.SENDGRID_FROM_EMAIL || 'admissions@cambridgecoe.edu.gh'
 const SENDGRID_NAME = process.env.SENDGRID_FROM_NAME  || 'Cambridge Center of Excellence'
 
-// ── Clean phone to E.164 for Ghana ─────────────────────────────────────────
 export const cleanPhone = (p) => {
   if (!p) return ''
-  return p.replace(/\s/g,'').replace(/^0/,'233').replace(/^\+/,'')
+  return String(p).replace(/\s/g, '').replace(/^0/, '233').replace(/^\+/, '')
 }
 
-// ── SMS via Arkesel ─────────────────────────────────────────────────────────
+// ── SMS via Arkesel v2 ──────────────────────────────────────────────────────
 export async function sendSMS({ phone, message, leadId = null, type = 'general' }) {
   if (!ARKESEL_KEY) return { ok: false, error: 'ARKESEL_API_KEY not set' }
-  const cleanedPhone = cleanPhone(phone)
-  if (!cleanedPhone) return { ok: false, error: 'Invalid phone' }
+  const to = cleanPhone(phone)
+  if (!to) return { ok: false, error: 'Invalid phone' }
 
+  let ok = false
   try {
-    const res = await fetch('https://sms.arkesel.com/sms/api?action=send-sms', {
+    const res = await fetch('https://sms.arkesel.com/api/v2/sms/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: ARKESEL_KEY,
-        to: cleanedPhone,
-        from: ARKESEL_FROM,
-        sms: message,
-      })
+      headers: { 'api-key': ARKESEL_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: ARKESEL_FROM, message, recipients: [to] }),
     })
     const data = await res.json()
-    const ok = data.code === 'ok' || data.status === 'success'
-
-    await sb.from('sms_log').insert({
-      lead_id: leadId, phone: cleanedPhone, message, type,
-      provider: 'arkesel', status: ok ? 'sent' : 'failed',
-    })
-
+    ok = res.ok && (data.status === 'success' || data.code === 'ok')
+    await sb.from('sms_log').insert({ lead_id: leadId, phone: to, message, type, provider: 'arkesel', status: ok ? 'sent' : 'failed' }).catch(() => {})
     return { ok, data }
   } catch (e) {
-    await sb.from('sms_log').insert({ lead_id: leadId, phone: cleanedPhone, message, type, provider: 'arkesel', status: 'failed' })
+    await sb.from('sms_log').insert({ lead_id: leadId, phone: to, message, type, provider: 'arkesel', status: 'failed' }).catch(() => {})
     return { ok: false, error: e.message }
   }
 }
 
-// ── WhatsApp via WABA ───────────────────────────────────────────────────────
+// ── WhatsApp via WABA API (or wa.me log fallback) ───────────────────────────
 export async function sendWA({ phone, message, leadId = null, type = 'general' }) {
-  const cleanedPhone = cleanPhone(phone)
-  if (!cleanedPhone) return { ok: false, error: 'Invalid phone' }
+  const to = cleanPhone(phone)
+  if (!to) return { ok: false, error: 'Invalid phone' }
 
-  // If WABA configured, use API
   if (WABA_TOKEN && WABA_PHONE_ID) {
     try {
       const res = await fetch(`https://graph.facebook.com/v18.0/${WABA_PHONE_ID}/messages`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${WABA_TOKEN}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${WABA_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
-          to: cleanedPhone,
+          to,
           type: 'text',
           text: { body: message, preview_url: true },
-        })
+        }),
       })
       const data = await res.json()
       const ok = !!data.messages?.[0]?.id
-      await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: cleanedPhone, message, marketer_name: 'System (Auto)', status: ok ? 'sent' : 'failed' })
+      await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: to, message, marketer_name: 'System (Auto)', status: ok ? 'sent' : 'failed' }).catch(() => {})
       return { ok, data }
     } catch (e) {
       return { ok: false, error: e.message }
     }
   }
 
-  // Fallback: log it (frontend can open wa.me)
-  await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: cleanedPhone, message, marketer_name: 'System (Auto)', status: 'pending_manual' })
-  return { ok: false, manual: true, waUrl: `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(message)}` }
+  // No WABA — log as pending_manual so frontend can open wa.me
+  await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: to, message, marketer_name: 'System (Auto)', status: 'pending_manual' }).catch(() => {})
+  return { ok: false, manual: true, waUrl: `https://wa.me/${to}?text=${encodeURIComponent(message)}` }
 }
 
 // ── Email via SendGrid ──────────────────────────────────────────────────────
-export async function sendEmail({ toEmail, toName, subject, html, text, type = 'general', leadId = null }) {
+export async function sendEmail({ toEmail, toName = '', subject, html, text, attachments = [], type = 'general', leadId = null }) {
   if (!SENDGRID_KEY) return { ok: false, error: 'SENDGRID_API_KEY not set' }
-  if (!toEmail) return { ok: false, error: 'No email address' }
+  if (!toEmail)      return { ok: false, error: 'No email address' }
+
+  const content = [
+    ...(text ? [{ type: 'text/plain', value: text }] : []),
+    ...(html ? [{ type: 'text/html',  value: html  }] : []),
+  ]
+  if (!content.length) return { ok: false, error: 'No email content' }
 
   try {
+    const body = {
+      personalizations: [{ to: [{ email: toEmail, name: toName }] }],
+      from: { email: SENDGRID_FROM, name: SENDGRID_NAME },
+      subject,
+      content,
+    }
+    if (attachments.length) body.attachments = attachments
     const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${SENDGRID_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: toEmail, name: toName || '' }] }],
-        from: { email: SENDGRID_FROM, name: SENDGRID_NAME },
-        subject,
-        content: [
-          ...(text ? [{ type: 'text/plain', value: text }] : []),
-          ...(html ? [{ type: 'text/html',  value: html  }] : []),
-        ],
-      })
+      headers: { Authorization: `Bearer ${SENDGRID_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     })
-    const ok = res.ok || res.status === 202
-    await sb.from('email_log').insert({ to_email: toEmail, to_name: toName || '', subject, type, lead_id: leadId, status: ok ? 'sent' : 'failed' })
+    const ok = res.status === 202
+    await sb.from('email_log').insert({ to_email: toEmail, to_name: toName, subject, type, lead_id: leadId, status: ok ? 'sent' : 'failed' }).catch(() => {})
     return { ok }
   } catch (e) {
     return { ok: false, error: e.message }
   }
-}
-
-// ── Send All (SMS + WA + Email) ─────────────────────────────────────────────
-export async function sendAll({ phone, email, name, message, subject, html, leadId, type }) {
-  const results = {}
-  if (phone) {
-    results.sms = await sendSMS({ phone, message, leadId, type })
-    results.wa  = await sendWA({ phone, message, leadId, type })
-  }
-  if (email) {
-    results.email = await sendEmail({ toEmail: email, toName: name, subject, html: html || `<p>${message.replace(/\n/g,'<br>')}</p>`, leadId, type })
-  }
-  return results
 }

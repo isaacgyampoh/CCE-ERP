@@ -11,6 +11,8 @@ export default function InstructorDashboard({ sb, user }) {
   const [opening, setOpening] = useState(false)
   const [codes, setCodes] = useState(null)
   const [toast, setToast] = useState(null)
+  const [payStats, setPayStats] = useState(null)
+  const [leadByName, setLeadByName] = useState({}) // student_name.lower → { lead_id, invoice }
   const pollRef = useRef(null)
 
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 4000) }
@@ -40,13 +42,67 @@ export default function InstructorDashboard({ sb, user }) {
     setSessions(data || [])
     // Auto-select today's session if it exists
     const todaySession = data?.find(s => s.session_date === today)
-    if (todaySession) { setSelected(todaySession); loadAttendance(todaySession.id) }
+    if (todaySession) { setSelected(todaySession); loadAttendance(todaySession.id); loadPaymentStats(todaySession.cohort_id) }
     setLoading(false)
   }
 
   const loadAttendance = async (sessionId) => {
     const { data } = await sb.from('attendance').select('*').eq('session_id', sessionId).order('checked_in_at')
     setAttendance(data || [])
+  }
+
+  const loadPaymentStats = async (cohortId) => {
+    if (!cohortId) return
+    // Load enrolments to get lead_ids for this cohort
+    const { data: enrolments } = await sb.from('enrolments')
+      .select('lead_id, leads(name)')
+      .eq('cohort_id', cohortId)
+    const leadIds = (enrolments || []).map(e => e.lead_id).filter(Boolean)
+
+    // Load invoices for these leads in this cohort
+    const { data: invoices } = await sb.from('school_fee_invoices')
+      .select('*')
+      .or(`cohort_id.eq.${cohortId},lead_id.in.(${leadIds.join(',') || 'null'})`)
+
+    // Load pending cash payments for these invoices
+    const invoiceIds = (invoices || []).map(i => i.id)
+    const { data: pendingPayments } = invoiceIds.length
+      ? await sb.from('course_fee_payments').select('invoice_id, lead_id').eq('status', 'pending_cash').in('invoice_id', invoiceIds)
+      : { data: [] }
+
+    const pendingInvoiceIds = new Set((pendingPayments || []).map(p => p.invoice_id))
+
+    let paid = 0, partialPaid = 0, pendingCash = 0, unpaid = 0
+    const nameMap = {}
+
+    for (const inv of invoices || []) {
+      const netFee = Number(inv.total_fee || 0) - Number(inv.scholarship_amount || 0) - Number(inv.discount_amount || 0)
+      const balance = Math.max(0, netFee - Number(inv.amount_paid || 0))
+      const hasPending = pendingInvoiceIds.has(inv.id)
+      if (inv.status === 'paid' || balance <= 0) paid++
+      else if (hasPending) pendingCash++
+      else if (Number(inv.amount_paid || 0) > 0) partialPaid++
+      else unpaid++
+    }
+
+    // Build name → invoice map for per-row badges
+    for (const e of enrolments || []) {
+      const name = e.leads?.name || ''
+      const inv = (invoices || []).find(i => i.lead_id === e.lead_id)
+      if (name && inv) {
+        const netFee = Number(inv.total_fee || 0) - Number(inv.scholarship_amount || 0) - Number(inv.discount_amount || 0)
+        const balance = Math.max(0, netFee - Number(inv.amount_paid || 0))
+        const hasPending = pendingInvoiceIds.has(inv.id)
+        let status = 'unpaid'
+        if (inv.status === 'paid' || balance <= 0) status = 'paid'
+        else if (hasPending) status = 'pending_cash'
+        else if (Number(inv.amount_paid || 0) > 0) status = 'partial'
+        nameMap[name.toLowerCase()] = status
+      }
+    }
+
+    setLeadByName(nameMap)
+    setPayStats({ paid, partialPaid, pendingCash, unpaid, total: (invoices || []).length })
   }
 
   const pollAttendance = async () => {
@@ -92,6 +148,14 @@ export default function InstructorDashboard({ sb, user }) {
   const inPerson = attendance.filter(a => a.mode === 'in-person')
   const online   = attendance.filter(a => a.mode === 'online')
 
+  const PAY_BADGE = {
+    paid:         { cls: 'bg-emerald-100 text-emerald-700', label: '✅ Paid' },
+    pending_cash: { cls: 'bg-amber-100 text-amber-700',    label: '💵 Cash' },
+    partial:      { cls: 'bg-blue-100 text-blue-700',      label: '🔄 Partial' },
+    unpaid:       { cls: 'bg-red-100 text-red-700',        label: '❌ Unpaid' },
+  }
+  const getPayBadge = (name) => leadByName[name?.toLowerCase()] ? PAY_BADGE[leadByName[name.toLowerCase()]] : null
+
   if (loading) return <Spinner size={24}/>
 
   return (
@@ -107,7 +171,7 @@ export default function InstructorDashboard({ sb, user }) {
       {sessions.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {sessions.map(s => (
-            <button key={s.id} onClick={() => { setSelected(s); loadAttendance(s.id) }}
+            <button key={s.id} onClick={() => { setSelected(s); loadAttendance(s.id); loadPaymentStats(s.cohort_id) }}
               className={`px-3 py-2 rounded-xl text-xs font-semibold border transition ${selected?.id === s.id ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'}`}>
               📅 {s.cohort?.course_name} — {fmtDate(s.session_date)}
               {s.attendance_open && <span className="ml-1.5 w-2 h-2 bg-green-400 rounded-full inline-block animate-pulse"/>}
@@ -180,7 +244,7 @@ export default function InstructorDashboard({ sb, user }) {
 
           {/* Live attendance list */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Counts */}
+            {/* Attendance counts */}
             <div className="grid grid-cols-3 gap-3">
               <div className="stat-card text-center">
                 <div className="stat-value text-blue-700">{inPerson.length}</div>
@@ -195,6 +259,31 @@ export default function InstructorDashboard({ sb, user }) {
                 <div className="stat-label">Total Present</div>
               </div>
             </div>
+
+            {/* Payment stats */}
+            {payStats && (
+              <div className="card p-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Fee Payment Status</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-xl bg-emerald-50 p-3 text-center">
+                    <div className="text-xl font-black text-emerald-700">{payStats.paid}</div>
+                    <div className="text-[10px] font-semibold text-emerald-600 mt-0.5">✅ Paid</div>
+                  </div>
+                  <div className="rounded-xl bg-amber-50 p-3 text-center">
+                    <div className="text-xl font-black text-amber-700">{payStats.pendingCash}</div>
+                    <div className="text-[10px] font-semibold text-amber-600 mt-0.5">💵 Pending Cash</div>
+                  </div>
+                  <div className="rounded-xl bg-blue-50 p-3 text-center">
+                    <div className="text-xl font-black text-blue-700">{payStats.partialPaid}</div>
+                    <div className="text-[10px] font-semibold text-blue-600 mt-0.5">🔄 Partial</div>
+                  </div>
+                  <div className="rounded-xl bg-red-50 p-3 text-center">
+                    <div className="text-xl font-black text-red-700">{payStats.unpaid}</div>
+                    <div className="text-[10px] font-semibold text-red-600 mt-0.5">❌ Unpaid</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Live list */}
             <div className="card overflow-hidden">
@@ -214,28 +303,36 @@ export default function InstructorDashboard({ sb, user }) {
                   {inPerson.length > 0 && (
                     <>
                       <div className="px-4 py-2 bg-blue-50 text-[10px] font-bold text-blue-600 uppercase tracking-wider">🏢 In-Person ({inPerson.length})</div>
-                      {inPerson.map((a, i) => (
-                        <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50">
-                          <span className="text-xs text-slate-300 w-5 font-bold">{i+1}</span>
-                          <Avatar name={a.student_name} size={28}/>
-                          <span className="flex-1 text-sm font-medium text-slate-800">{a.student_name}</span>
-                          <span className="text-[10px] text-slate-400">{new Date(a.checked_in_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                      ))}
+                      {inPerson.map((a, i) => {
+                        const badge = getPayBadge(a.student_name)
+                        return (
+                          <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50">
+                            <span className="text-xs text-slate-300 w-5 font-bold">{i+1}</span>
+                            <Avatar name={a.student_name} size={28}/>
+                            <span className="flex-1 text-sm font-medium text-slate-800">{a.student_name}</span>
+                            {badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${badge.cls}`}>{badge.label}</span>}
+                            <span className="text-[10px] text-slate-400">{new Date(a.checked_in_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        )
+                      })}
                     </>
                   )}
                   {/* Online section */}
                   {online.length > 0 && (
                     <>
                       <div className="px-4 py-2 bg-violet-50 text-[10px] font-bold text-violet-600 uppercase tracking-wider">💻 Online ({online.length})</div>
-                      {online.map((a, i) => (
-                        <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50">
-                          <span className="text-xs text-slate-300 w-5 font-bold">{i+1}</span>
-                          <Avatar name={a.student_name} size={28}/>
-                          <span className="flex-1 text-sm font-medium text-slate-800">{a.student_name}</span>
-                          <span className="text-[10px] text-slate-400">{new Date(a.checked_in_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
-                        </div>
-                      ))}
+                      {online.map((a, i) => {
+                        const badge = getPayBadge(a.student_name)
+                        return (
+                          <div key={a.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-50">
+                            <span className="text-xs text-slate-300 w-5 font-bold">{i+1}</span>
+                            <Avatar name={a.student_name} size={28}/>
+                            <span className="flex-1 text-sm font-medium text-slate-800">{a.student_name}</span>
+                            {badge && <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${badge.cls}`}>{badge.label}</span>}
+                            <span className="text-[10px] text-slate-400">{new Date(a.checked_in_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        )
+                      })}
                     </>
                   )}
                 </div>

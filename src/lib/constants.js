@@ -13,13 +13,13 @@ export const STATUS = {
   inquiry:              { label: 'Inquiry',            cls: 'bg-slate-100 text-slate-500',   dot: '#94a3b8' },
 }
 
-export const SOURCES = ['facebook', 'linkedin', 'website', 'manual', 'referral', 'walk-in', 'personal']
+export const SOURCES = ['facebook', 'linkedin', 'google_ads', 'instagram', 'website', 'manual', 'referral', 'walk-in', 'personal']
 export const ROLES   = ['marketer', 'pm', 'admin', 'finance', 'admission', 'receptionist']
 
 export const PAYSTACK_PK = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || ''
 
-export const WA_ASSIGN_MSG = (leadName, marketerName) =>
-  `Hello ${leadName}! 👋\n\nThank you for your interest in Cambridge Center of Excellence.\n\nMy name is ${marketerName} and I'll be your dedicated admissions consultant. I'll be reaching out shortly to guide you through your enrollment journey.\n\nFeel free to reply anytime!\n\nBest regards,\n${marketerName}\nCambridge Center of Excellence 🎓`
+export const WA_ASSIGN_MSG = (leadName, marketerName, course = '') =>
+  `Hi ${leadName.split(' ')[0]}! 👋\n\nThis is *Cambridge Center of Excellence*.\n\nThank you for your interest${course ? ` in *${course}*` : ' in our programs'}. 🎓\n\n*${marketerName.split(' ')[0]}* will be calling you shortly to explain more and walk you through the enrollment process.\n\nWe look forward to speaking with you!\n\n— Cambridge Center of Excellence`
 
 export const WA_REG_MSG = (leadName, regLink, marketerName) =>
   `Hello ${leadName}! 🎓\n\nGreat news — you're one step away from joining Cambridge Center of Excellence!\n\nPlease click the link below to complete your registration form and pay your registration fee:\n\n👉 ${regLink}\n\nOnce payment is confirmed, our Admissions team will reach out with your enrollment documents and course details.\n\nAny questions? I'm right here!\n\n${marketerName}\nCambridge Center of Excellence`
@@ -85,6 +85,17 @@ Click the link below to sign in:
 You'll need the *class code* written on the board/screen to complete sign-in.
 
 See you inside! 🚀`
+
+export const LEAD_TAGS = [
+  { name: 'hot',           label: 'Hot',            color: 'bg-red-100 text-red-700' },
+  { name: 'vip',           label: 'VIP',            color: 'bg-purple-100 text-purple-700' },
+  { name: 'scholarship',   label: 'Scholarship',    color: 'bg-blue-100 text-blue-700' },
+  { name: 'callback',      label: 'Needs Callback', color: 'bg-amber-100 text-amber-700' },
+  { name: 'high_intent',   label: 'High Intent',    color: 'bg-emerald-100 text-emerald-700' },
+  { name: 'corporate',     label: 'Corporate',      color: 'bg-indigo-100 text-indigo-700' },
+  { name: 'international', label: 'International',  color: 'bg-cyan-100 text-cyan-700' },
+  { name: 'referral',      label: 'Referral',       color: 'bg-violet-100 text-violet-700' },
+]
 
 export const MSG_RECEIPT = (name, amount, paymentType, receiptNo, date) =>
 `🧾 *Payment Receipt — Cambridge Center of Excellence*

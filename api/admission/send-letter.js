@@ -12,17 +12,12 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
+import { sendEmail, sendWA } from '../lib/notify.js'
 
 const sb = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 )
-
-const SENDGRID_KEY  = process.env.SENDGRID_API_KEY
-const SENDGRID_FROM = process.env.SENDGRID_FROM_EMAIL || 'admissions@cambridgecoe.edu.gh'
-const SENDGRID_NAME = process.env.SENDGRID_FROM_NAME  || 'Cambridge Center of Excellence'
-const WABA_TOKEN    = process.env.WABA_TOKEN     // WhatsApp Business API token (optional)
-const WABA_PHONE_ID = process.env.WABA_PHONE_ID  // WhatsApp Business phone number ID
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -153,62 +148,24 @@ Cambridge Center of Excellence
   const results = { email: false, whatsapp: false, errors: [] }
 
   // ── 1. Send Email via SendGrid ──────────────────────────────────────────
-  if (SENDGRID_KEY && email) {
-    try {
-      const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${SENDGRID_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email, name }] }],
-          from: { email: SENDGRID_FROM, name: SENDGRID_NAME },
-          subject: `🎓 Your Admission Letter — Cambridge Center of Excellence (Ref: ${admissionNo})`,
-          content: [
-            { type: 'text/plain', value: letterText },
-            { type: 'text/html',  value: htmlLetter },
-          ],
-          categories: ['admission-letter'],
-          custom_args: { registration_id, lead_id: reg.lead_id },
-        })
-      })
-      if (sgRes.ok || sgRes.status === 202) {
-        results.email = true
-        await sb.from('email_log').insert({ to_email: email, to_name: name, subject: `Admission Letter — ${admissionNo}`, type: 'admission', lead_id: reg.lead_id, status: 'sent' })
-      } else {
-        const err = await sgRes.text()
-        results.errors.push(`Email: ${err}`)
-      }
-    } catch (e) { results.errors.push(`Email error: ${e.message}`) }
-  } else if (!SENDGRID_KEY) {
-    results.errors.push('SENDGRID_API_KEY not configured')
-  } else if (!email) {
+  if (email) {
+    const { ok, error: emailErr } = await sendEmail({
+      toEmail: email, toName: name,
+      subject: `🎓 Your Admission Letter — Cambridge Center of Excellence (Ref: ${admissionNo})`,
+      html: htmlLetter, text: letterText,
+      type: 'admission', leadId: reg.lead_id,
+    })
+    results.email = ok
+    if (emailErr) results.errors.push(`Email: ${emailErr}`)
+  } else {
     results.errors.push('Student email not on file')
   }
 
-  // ── 2. WhatsApp via WABA (if configured) or log for manual send ─────────
-  if (WABA_TOKEN && WABA_PHONE_ID && phone) {
-    try {
-      const cleanPhone = phone.replace(/\s/g,'').replace(/^0/,'233').replace(/^\+/,'')
-      const waRes = await fetch(`https://graph.facebook.com/v18.0/${WABA_PHONE_ID}/messages`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${WABA_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'text',
-          text: { body: waMsg }
-        })
-      })
-      if (waRes.ok) {
-        results.whatsapp = true
-        await sb.from('whatsapp_log').insert({ lead_id: reg.lead_id, phone, message: waMsg, marketer_name: 'Admissions (Auto)', status: 'sent' })
-      }
-    } catch (e) { results.errors.push(`WA API error: ${e.message}`) }
-  } else {
-    // Log it so frontend can open wa.me
-    await sb.from('whatsapp_log').insert({ lead_id: reg.lead_id, phone: phone || '', message: waMsg, marketer_name: 'Admissions (Auto)', status: phone ? 'pending_manual' : 'no_phone' })
-    results.whatsapp_message = waMsg
-    results.whatsapp_phone   = phone
+  // ── 2. WhatsApp ─────────────────────────────────────────────────────────
+  if (phone) {
+    const { ok, manual, waUrl } = await sendWA({ phone, message: waMsg, leadId: reg.lead_id, type: 'admission' })
+    results.whatsapp = ok
+    if (manual) { results.whatsapp_message = waMsg; results.whatsapp_phone = phone; results.wa_url = waUrl }
   }
 
   // ── 3. Update DB ────────────────────────────────────────────────────────

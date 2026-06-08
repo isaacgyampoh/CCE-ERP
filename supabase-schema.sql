@@ -485,3 +485,130 @@ CREATE POLICY "all sms_log" ON sms_log FOR ALL USING (true);
 ALTER TABLE leads       ADD COLUMN IF NOT EXISTS cohort_id UUID REFERENCES cohorts(id);
 ALTER TABLE staff       ADD COLUMN IF NOT EXISTS instructor_for TEXT DEFAULT ''; -- course name
 ALTER TABLE courses     ADD COLUMN IF NOT EXISTS active_cohort_id UUID;
+
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PHASE 4 — Bulk SMS Campaigns, Lead Scoring, Pipeline, Reports
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- Bulk SMS campaigns log
+CREATE TABLE IF NOT EXISTS sms_campaigns (
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_by      UUID REFERENCES staff(id),
+  message         TEXT NOT NULL,
+  recipient_count INT DEFAULT 0,
+  sent_count      INT DEFAULT 0,
+  failed_count    INT DEFAULT 0,
+  status_filter   TEXT DEFAULT 'all',  -- lead status filter used
+  source_filter   TEXT DEFAULT 'all',  -- lead source filter used
+  status          TEXT DEFAULT 'sending', -- sending | done | failed
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE sms_campaigns ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all sms_campaigns" ON sms_campaigns FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_sms_campaigns_created ON sms_campaigns(created_at DESC);
+
+-- Enable Realtime on key tables (run in Supabase Dashboard → Database → Replication)
+-- Or run these in SQL Editor:
+-- ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+-- ALTER PUBLICATION supabase_realtime ADD TABLE leads;
+
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PHASE 5 — Command Palette, Lead Import, Marketer Targets, Lead Tags
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- Lead tags (multi-label per lead)
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_leads_tags ON leads USING GIN(tags);
+
+-- Marketer monthly targets + commission
+CREATE TABLE IF NOT EXISTS marketer_targets (
+  id                   UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  marketer_id          UUID REFERENCES staff(id) ON DELETE CASCADE,
+  month                INT NOT NULL CHECK (month BETWEEN 1 AND 12),
+  year                 INT NOT NULL,
+  target_leads         INT DEFAULT 20,
+  target_registrations INT DEFAULT 5,
+  commission_rate      NUMERIC(10,2) DEFAULT 50,
+  created_at           TIMESTAMPTZ DEFAULT now(),
+  updated_at           TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (marketer_id, month, year)
+);
+ALTER TABLE marketer_targets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all marketer_targets" ON marketer_targets FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_marketer_targets_period ON marketer_targets(marketer_id, year, month);
+
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- PHASE 6 — Class Fee Payment Flow (Attendance → Fee → Pay → Receipt)
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- Enhance school_fee_invoices with discount/scholarship tracking and cohort link
+ALTER TABLE school_fee_invoices ADD COLUMN IF NOT EXISTS cohort_id UUID REFERENCES cohorts(id);
+ALTER TABLE school_fee_invoices ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE school_fee_invoices ADD COLUMN IF NOT EXISTS scholarship_amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE school_fee_invoices ADD COLUMN IF NOT EXISTS discount_amount    NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE school_fee_invoices ADD COLUMN IF NOT EXISTS net_fee            NUMERIC(10,2);
+CREATE INDEX IF NOT EXISTS idx_sfi_lead_cohort ON school_fee_invoices(lead_id, cohort_id);
+
+-- Course fee payment transactions (full installment history)
+-- Separate from `payments` (reg fee table) to track school fee installments
+CREATE TABLE IF NOT EXISTS course_fee_payments (
+  id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  invoice_id     UUID REFERENCES school_fee_invoices(id) ON DELETE CASCADE,
+  lead_id        UUID REFERENCES leads(id),
+  amount         NUMERIC(10,2) NOT NULL,
+  method         TEXT NOT NULL DEFAULT 'cash',   -- cash | momo | card | bank
+  status         TEXT NOT NULL DEFAULT 'pending_cash', -- pending_cash | completed | failed
+  reference      TEXT,
+  receipt_no     TEXT,
+  recorded_by    UUID REFERENCES staff(id),
+  notes          TEXT,
+  paid_at        TIMESTAMPTZ DEFAULT now(),
+  created_at     TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE course_fee_payments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all course_fee_payments" ON course_fee_payments FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_cfp_invoice ON course_fee_payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_cfp_status  ON course_fee_payments(status);
+CREATE INDEX IF NOT EXISTS idx_cfp_lead    ON course_fee_payments(lead_id);
+-- ALTER PUBLICATION supabase_realtime ADD TABLE leads;
+
+-- ─── Document Hub ──────────────────────────────────────────────────────────────
+-- NOTE: Also create a public Supabase Storage bucket named "documents" in the
+--       Supabase dashboard (Storage → New bucket → name: documents, Public: ON)
+
+CREATE TABLE IF NOT EXISTS documents (
+  id             UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name           TEXT NOT NULL,
+  type           TEXT NOT NULL DEFAULT 'other',     -- brochure|course_outline|admission_letter|invoice|receipt|other
+  description    TEXT,
+  file_name      TEXT NOT NULL,
+  file_url       TEXT NOT NULL,
+  file_size      INT,
+  trigger_event  TEXT NOT NULL DEFAULT 'manual',    -- manual|lead_created|admission_approved|payment_confirmed
+  is_active      BOOLEAN DEFAULT true,
+  course         TEXT,                              -- optional: only send for leads interested in this course
+  sends_count    INT DEFAULT 0,
+  created_by     UUID REFERENCES staff(id),
+  created_at     TIMESTAMPTZ DEFAULT now(),
+  updated_at     TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all documents" ON documents FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_documents_trigger ON documents(trigger_event, is_active);
+
+CREATE TABLE IF NOT EXISTS document_sends (
+  id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  document_id  UUID REFERENCES documents(id) ON DELETE SET NULL,
+  lead_id      UUID REFERENCES leads(id),
+  channel      TEXT NOT NULL DEFAULT 'email',  -- email|whatsapp|email,whatsapp
+  status       TEXT DEFAULT 'sent',            -- sent|failed
+  sent_by      UUID REFERENCES staff(id),
+  sent_at      TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE document_sends ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "all document_sends" ON document_sends FOR ALL USING (true);
+CREATE INDEX IF NOT EXISTS idx_doc_sends_lead ON document_sends(lead_id);
+CREATE INDEX IF NOT EXISTS idx_doc_sends_doc  ON document_sends(document_id);

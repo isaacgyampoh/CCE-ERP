@@ -30,23 +30,38 @@ export const marketerRegLink = (marketerId, leadId) => {
   return `${base}/register?m=${marketerId}&l=${leadId}`
 }
 
-// Arkesel SMS
-const ARKESEL_KEY = 'VXliSENVQnpsYkhWYlNpZkNRZEc'
-const SMS_SENDER = 'Cambridge'
-
+// Arkesel SMS — key stored in VITE_ARKESEL_API_KEY env var
 export const sendSMS = async (phone, message) => {
   if (!phone) return
+  const key = import.meta.env.VITE_ARKESEL_API_KEY
+  if (!key) { console.warn('VITE_ARKESEL_API_KEY not set'); return null }
   const recipient = formatPhone(phone)
   try {
     const res = await fetch('https://sms.arkesel.com/api/v2/sms/send', {
       method: 'POST',
-      headers: { 'api-key': ARKESEL_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender: SMS_SENDER, message, recipients: [recipient] }),
+      headers: { 'api-key': key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sender: 'Cambridge', message, recipients: [recipient] }),
     })
-    const data = await res.json()
-    console.log('SMS sent to', recipient, data)
-    return data
+    return res.json()
   } catch (e) { console.error('SMS error:', e); return null }
+}
+
+// Lead score 1–100: phone (+20), email (+10), scholarship (+5), status progression, time decay
+export const leadScore = (lead) => {
+  let score = 0
+  if (lead.phone) score += 20
+  if (lead.email) score += 10
+  if (lead.scholarship_interest) score += 5
+  const sp = {
+    new: 5, inquiry: 5, assigned: 10, contacted: 20,
+    follow_up: 25, pending_registration: 35,
+    registered: 55, next_session: 40, not_qualified: 0,
+  }
+  score += sp[lead.status] ?? 5
+  const days = (Date.now() - new Date(lead.created_at)) / 86400000
+  if (days > 60) score -= 10
+  else if (days > 30) score -= 5
+  return Math.max(1, Math.min(100, score))
 }
 
 // Load Paystack inline script once
