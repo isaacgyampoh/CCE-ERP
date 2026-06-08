@@ -17,10 +17,18 @@ ALTER TABLE registrations
   ADD COLUMN IF NOT EXISTS school_fee_due_date DATE;
 
 -- ══ cohorts — add label (display name) column ═════════════
--- cohorts.name was NOT NULL — relax it so inserts using label work
 ALTER TABLE cohorts
-  ALTER COLUMN name SET DEFAULT '',
   ADD COLUMN IF NOT EXISTS label TEXT DEFAULT '';
+
+-- Relax name NOT NULL only if the column exists
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'cohorts' AND column_name = 'name'
+  ) THEN
+    ALTER TABLE cohorts ALTER COLUMN name SET DEFAULT '';
+  END IF;
+END $$;
 
 -- ══ enrolments — add student_phone/email + reminder flags ═
 ALTER TABLE enrolments
