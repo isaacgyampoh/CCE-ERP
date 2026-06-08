@@ -62,7 +62,7 @@ async function sendReminderForCohort(cohortId, reminderType) {
     '1month': 'reminder_1month_sent',
     '1week':  'reminder_1week_sent',
     '2day':   'reminder_2day_sent',
-    '1day':   'reminder_1day_sent',
+    '1day':   'reminder_2day_sent',
     'rsvp':   null,
   }
   const sentField = fieldMap[reminderType]

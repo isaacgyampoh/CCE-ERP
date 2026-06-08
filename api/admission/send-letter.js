@@ -170,29 +170,21 @@ Cambridge Center of Excellence
 
   // ── 3. Update DB ────────────────────────────────────────────────────────
   await sb.from('registrations').update({
-    admission_letter_sent: true,
-    admission_letter_sent_at: new Date().toISOString(),
-    admission_letter_email_sent: results.email,
-    admission_letter_wa_sent: results.whatsapp,
+    notes: `Admission letter sent ${new Date().toISOString().slice(0,10)}. Email:${results.email?'✓':'✗'} WA:${results.whatsapp?'✓':'✗'}`,
     updated_at: new Date().toISOString(),
   }).eq('id', registration_id)
 
-  await sb.from('leads').update({ admission_sent: true, admission_sent_at: new Date().toISOString() }).eq('id', reg.lead_id)
-
-  // Log the letter
+  const sentVia = [results.email && 'email', results.whatsapp && 'whatsapp'].filter(Boolean).join(',') || 'none'
   await sb.from('admission_letters').insert({
     registration_id,
-    lead_id:        reg.lead_id,
-    student_name:   name,
-    student_email:  email || '',
-    student_phone:  phone || '',
+    lead_id:      reg.lead_id,
+    student_name: name,
     course,
-    mode:           mode || '',
-    marketer_name:  marketer,
-    sent_via_email: results.email,
-    sent_via_wa:    results.whatsapp,
-    sent_by:        sent_by_id || null,
-    letter_content: letterText,
+    mode:         mode || '',
+    letter_html:  htmlLetter,
+    sent_via:     sentVia,
+    sent_at:      new Date().toISOString(),
+    sent_by:      sent_by_id || null,
   })
 
   // Notify the marketer

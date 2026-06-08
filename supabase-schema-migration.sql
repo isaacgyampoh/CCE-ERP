@@ -153,6 +153,25 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- ══ NEW TABLE: document_sends ════════════════════════════
+CREATE TABLE IF NOT EXISTS document_sends (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+  lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
+  channel TEXT DEFAULT 'email',
+  status TEXT DEFAULT 'sent',
+  sent_by UUID REFERENCES staff(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE document_sends ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'document_sends' AND policyname = 'all'
+  ) THEN
+    CREATE POLICY "all" ON document_sends FOR ALL USING (true);
+  END IF;
+END $$;
+
 -- ══ NEW INDEXES ════════════════════════════════════════════
 CREATE INDEX IF NOT EXISTS idx_enrol_lead ON enrolments(lead_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_date ON class_sessions(session_date);

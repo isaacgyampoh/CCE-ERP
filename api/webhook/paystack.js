@@ -7,7 +7,7 @@
  *   invoicepayment.success → confirm school fee payment → update invoice
  */
 
-import crypto from 'node:crypto'
+import { createHmac } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 
 const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
   // Verify signature
   const secret = process.env.PAYSTACK_SECRET_KEY
-  const hash   = crypto.createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex')
+  const hash   = createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex')
   if (hash !== req.headers['x-paystack-signature']) return res.status(401).json({ error: 'Invalid signature' })
 
   const { event, data } = req.body
@@ -45,17 +45,17 @@ export default async function handler(req, res) {
         lead_id: leadId, marketer_id: marketerId, marketer_name: marketerName,
         full_name: lead?.name || '', phone: lead?.phone || '', email: lead?.email || customer?.email || '',
         course_interest: lead?.course_interest || '', mode_preference: lead?.mode_preference || '',
-        paystack_ref: reference, amount_paid: amountGHS, paid_at: new Date().toISOString(), status: 'paid',
+        payment_reference: reference, amount_paid: amountGHS, status: 'paid',
       }).select().single()
       registrationId = newReg?.id
     } else {
       // Update existing
-      await sb.from('registrations').update({ status: 'paid', paystack_ref: reference, amount_paid: amountGHS, paid_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', registrationId)
+      await sb.from('registrations').update({ status: 'paid', payment_reference: reference, amount_paid: amountGHS, updated_at: new Date().toISOString() }).eq('id', registrationId)
     }
 
     // Upsert payment record
     await sb.from('payments').upsert({
-      lead_id: leadId, registration_id: registrationId, marketer_id: marketerId,
+      lead_id: leadId, registration_id: registrationId,
       payment_type: 'registration', amount: amountGHS, reference, channel: 'paystack',
       status: 'success', paid_at: new Date().toISOString(),
     }, { onConflict: 'reference' })
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
         const newBalance = Math.max(0, Number(invoice.total_fee) - newPaid)
         const newStatus  = newBalance <= 0 ? 'paid' : 'partial'
         await sb.from('school_fee_invoices').update({ amount_paid: newPaid, balance: newBalance, status: newStatus, updated_at: new Date().toISOString() }).eq('id', invoice.id)
-        await sb.from('registrations').update({ school_fee_paid: newPaid, school_fee_status: newStatus, updated_at: new Date().toISOString() }).eq('id', registrationId)
+        await sb.from('registrations').update({ school_fee_amount: newPaid, school_fee_status: newStatus, updated_at: new Date().toISOString() }).eq('id', registrationId)
         if (leadId) await sb.from('leads').update({ school_fee_status: newStatus }).eq('id', leadId)
       }
 
