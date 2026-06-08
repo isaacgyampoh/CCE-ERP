@@ -30,20 +30,15 @@ export const marketerRegLink = (marketerId, leadId) => {
   return `${base}/register?m=${marketerId}&l=${leadId}`
 }
 
-// Arkesel SMS — key stored in VITE_ARKESEL_API_KEY env var
-export const sendSMS = async (phone, message) => {
-  if (!phone) return
-  const key = import.meta.env.VITE_ARKESEL_API_KEY
-  if (!key) { console.warn('VITE_ARKESEL_API_KEY not set'); return null }
-  const recipient = formatPhone(phone)
-  try {
-    const res = await fetch('https://sms.arkesel.com/api/v2/sms/send', {
-      method: 'POST',
-      headers: { 'api-key': key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender: 'Cambridge', message, recipients: [recipient] }),
-    })
-    return res.json()
-  } catch (e) { console.error('SMS error:', e); return null }
+// SMS — proxied through /api/send-sms so the Arkesel key never reaches the browser
+export const sendSMS = async (recipients, message) => {
+  if (!recipients || !message) return null
+  const res = await fetch('/api/send-sms', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipients, message }),
+  })
+  return res.json()
 }
 
 // Lead score 1–100: phone (+20), email (+10), scholarship (+5), status progression, time decay

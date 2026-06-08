@@ -4,13 +4,17 @@ import { Icon } from '@/components/ui'
 import { STATUS, SOURCES } from '@/lib/constants'
 import { sendSMS, formatPhone, fmtDate } from '@/lib/helpers'
 
+const StatusDot = ({ color }) => (
+  <span style={{ width:6, height:6, borderRadius:'50%', background:color, display:'inline-block', flexShrink:0 }}/>
+)
+
 export default function BulkSMS({ leads, staff, sb, user }) {
   const [statusF,   setStatusF]   = useState('all')
   const [sourceF,   setSourceF]   = useState('all')
   const [marketerF, setMarketerF] = useState('all')
   const [message,   setMessage]   = useState('')
   const [sending,   setSending]   = useState(false)
-  const [result,    setResult]    = useState(null)  // { sent, failed, total }
+  const [result,    setResult]    = useState(null)
   const [campaigns, setCampaigns] = useState([])
   const [loadingH,  setLoadingH]  = useState(true)
   const [confirmed, setConfirmed] = useState(false)
@@ -25,7 +29,6 @@ export default function BulkSMS({ leads, staff, sb, user }) {
       .then(({ data }) => { setCampaigns(data || []); setLoadingH(false) })
   }, [])
 
-  // Leads matching current filters (must have a phone number)
   const recipients = leads.filter(l => {
     if (!l.phone) return false
     if (statusF   !== 'all' && l.status      !== statusF)   return false
@@ -40,7 +43,6 @@ export default function BulkSMS({ leads, staff, sb, user }) {
     setResult(null)
     setConfirmed(false)
 
-    // Log campaign first
     const { data: campaign } = await sb.from('sms_campaigns').insert({
       created_by:      user.id,
       message,
@@ -55,10 +57,7 @@ export default function BulkSMS({ leads, staff, sb, user }) {
     for (const lead of recipients) {
       const phone = formatPhone(lead.phone)
       if (!phone) { failed++; continue }
-
-      // Personalise: swap {name} placeholder
       const personalised = message.replace(/\{name\}/gi, lead.name.split(' ')[0])
-
       const r = await sendSMS(phone, personalised)
       if (r?.status === 'success' || r?.message) {
         sent++
@@ -71,7 +70,6 @@ export default function BulkSMS({ leads, staff, sb, user }) {
       }
     }
 
-    // Update campaign record
     if (campaign?.id) {
       await sb.from('sms_campaigns').update({
         status: 'done', sent_count: sent, failed_count: failed,
@@ -89,13 +87,13 @@ export default function BulkSMS({ leads, staff, sb, user }) {
   return (
     <div className="fade-up space-y-5 max-w-3xl">
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Bulk SMS Campaigns</h1>
-        <p className="text-sm text-slate-400 mt-0.5">Send targeted SMS to filtered groups of leads via Arkesel</p>
+        <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)' }}>Bulk SMS Campaigns</h1>
+        <p style={{ fontSize:12.5, color:'var(--ink-3)', marginTop:2 }}>Send targeted SMS to filtered groups of leads via Arkesel</p>
       </div>
 
       {/* Compose card */}
       <div className="card p-5 space-y-4">
-        <h2 className="text-sm font-bold text-slate-900">New Campaign</h2>
+        <h2 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>New Campaign</h2>
 
         {/* Filters */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -123,12 +121,16 @@ export default function BulkSMS({ leads, staff, sb, user }) {
         </div>
 
         {/* Recipients preview */}
-        <div className={`rounded-xl p-3 border flex items-center justify-between ${recipients.length > 0 ? 'bg-blue-50 border-blue-100' : 'bg-slate-50 border-slate-100'}`}>
+        <div style={{
+          borderRadius:'var(--r)', padding:12, border:'1px solid var(--border)',
+          background: recipients.length > 0 ? 'var(--accent-wash)' : 'var(--bg)',
+          display:'flex', alignItems:'center', justifyContent:'space-between'
+        }}>
           <div>
-            <div className="text-sm font-bold text-slate-900">
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>
               {recipients.length} recipient{recipients.length !== 1 ? 's' : ''} selected
             </div>
-            <div className="text-[11px] text-slate-500">
+            <div style={{ fontSize:11, color:'var(--ink-2)', marginTop:2 }}>
               {leads.filter(l => !l.phone).length > 0
                 ? `${leads.filter(l => !l.phone).length} lead(s) skipped — no phone`
                 : 'All leads in this filter have phone numbers'}
@@ -138,7 +140,7 @@ export default function BulkSMS({ leads, staff, sb, user }) {
             <div className="flex -space-x-2">
               {recipients.slice(0, 5).map(l => <Avatar key={l.id} name={l.name} size={28}/>)}
               {recipients.length > 5 && (
-                <div className="w-7 h-7 rounded-full bg-blue-200 flex items-center justify-center text-[10px] font-bold text-blue-700">
+                <div style={{ width:28, height:28, borderRadius:'50%', background:'var(--border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'var(--ink-2)' }}>
                   +{recipients.length - 5}
                 </div>
               )}
@@ -157,7 +159,7 @@ export default function BulkSMS({ leads, staff, sb, user }) {
                 ['Class starting', `Hi {name}! Your class at Cambridge Center of Excellence is starting soon. Please check your registration and confirm your attendance. Cambridge`],
               ].map(([label, tpl]) => (
                 <button key={label} onClick={() => setMessage(tpl)}
-                  className="text-[10px] text-blue-600 font-medium hover:underline">
+                  style={{ fontSize:10, color:'var(--accent)', fontWeight:500, background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>
                   {label}
                 </button>
               ))}
@@ -172,9 +174,9 @@ export default function BulkSMS({ leads, staff, sb, user }) {
             style={{ height: 'auto', resize: 'vertical' }}
           />
           <div className="flex justify-between mt-1">
-            <span className="text-[10px] text-slate-400">{charCount} chars · {smsCount} SMS unit{smsCount !== 1 ? 's' : ''} per recipient</span>
+            <span style={{ fontSize:10, color:'var(--ink-3)' }}>{charCount} chars · {smsCount} SMS unit{smsCount !== 1 ? 's' : ''} per recipient</span>
             {charCount > 0 && recipients.length > 0 && (
-              <span className="text-[10px] font-semibold text-slate-500">
+              <span style={{ fontSize:10, fontWeight:600, color:'var(--ink-2)' }}>
                 ~{smsCount * recipients.length} total SMS units
               </span>
             )}
@@ -183,19 +185,26 @@ export default function BulkSMS({ leads, staff, sb, user }) {
 
         {/* Confirm checkbox */}
         {recipients.length > 0 && message.trim() && !result && (
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-600">
+          <label className="flex items-center gap-2 cursor-pointer" style={{ fontSize:13, color:'var(--ink-2)' }}>
             <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}
-              className="w-4 h-4 accent-blue-600"/>
+              style={{ accentColor:'var(--accent)', width:16, height:16 }}/>
             I confirm sending to {recipients.length} lead{recipients.length !== 1 ? 's' : ''} — this cannot be undone
           </label>
         )}
 
         {/* Result banner */}
         {result && (
-          <div className={`rounded-xl p-4 border ${result.failed === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
-            <div className="text-sm font-bold text-slate-900 mb-1">Campaign sent!</div>
-            <div className="text-xs text-slate-600">
-              ✓ {result.sent} delivered &nbsp;·&nbsp; ✗ {result.failed} failed &nbsp;·&nbsp; {result.total} total
+          <div style={{
+            borderRadius:'var(--r)', padding:16,
+            border:`1px solid ${result.failed === 0 ? 'var(--border)' : 'var(--border)'}`,
+            background: result.failed === 0 ? 'var(--accent-wash)' : '#fffbeb',
+          }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)', marginBottom:4 }}>Campaign sent!</div>
+            <div style={{ fontSize:12, color:'var(--ink-2)' }}>
+              <span style={{ color:'var(--ok)' }}>✓ {result.sent} delivered</span>
+              {' '}&nbsp;·&nbsp;{' '}
+              <span style={{ color: result.failed ? 'var(--bad)' : 'var(--ink-3)' }}>✗ {result.failed} failed</span>
+              {' '}&nbsp;·&nbsp;{' '}{result.total} total
             </div>
           </div>
         )}
@@ -215,14 +224,14 @@ export default function BulkSMS({ leads, staff, sb, user }) {
 
       {/* Campaign history */}
       <div className="card overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900">Campaign History</h2>
-          <span className="text-xs text-slate-400">{campaigns.length} campaigns</span>
+        <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <h2 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Campaign History</h2>
+          <span style={{ fontSize:12, color:'var(--ink-3)' }}>{campaigns.length} campaigns</span>
         </div>
         {loadingH ? (
           <div className="py-10 flex justify-center"><Spinner size={20}/></div>
         ) : campaigns.length === 0 ? (
-          <EmptyState icon="📱" title="No campaigns yet" sub="Campaigns will appear here after sending"/>
+          <EmptyState title="No campaigns yet" sub="Campaigns will appear here after sending"/>
         ) : (
           <div className="overflow-x-auto">
             <table className="data-table">
@@ -239,19 +248,20 @@ export default function BulkSMS({ leads, staff, sb, user }) {
               <tbody>
                 {campaigns.map(c => (
                   <tr key={c.id} className="cursor-default">
-                    <td className="text-xs text-slate-500 whitespace-nowrap">{fmtDate(c.created_at)}</td>
-                    <td className="max-w-[220px]">
-                      <div className="text-xs text-slate-700 truncate">{c.message}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 capitalize">
+                    <td style={{ fontSize:12, color:'var(--ink-2)', whiteSpace:'nowrap' }}>{fmtDate(c.created_at)}</td>
+                    <td style={{ maxWidth:220 }}>
+                      <div style={{ fontSize:12, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.message}</div>
+                      <div style={{ fontSize:10, color:'var(--ink-3)', marginTop:2, textTransform:'capitalize' }}>
                         {c.status_filter !== 'all' && `Status: ${c.status_filter}`}
                         {c.source_filter !== 'all' && ` · Source: ${c.source_filter}`}
                       </div>
                     </td>
-                    <td className="text-xs font-bold text-slate-700">{c.recipient_count}</td>
-                    <td className="text-xs font-bold text-emerald-600">{c.sent_count ?? '—'}</td>
-                    <td className="text-xs text-red-500">{c.failed_count ?? '—'}</td>
+                    <td style={{ fontSize:12, fontWeight:700, color:'var(--ink)' }}>{c.recipient_count}</td>
+                    <td style={{ fontSize:12, fontWeight:700, color:'var(--ok)' }}>{c.sent_count ?? '—'}</td>
+                    <td style={{ fontSize:12, color: c.failed_count ? 'var(--bad)' : 'var(--ink-3)' }}>{c.failed_count ?? '—'}</td>
                     <td>
-                      <span className={`badge ${c.status === 'done' ? 'bg-emerald-50 text-emerald-700' : c.status === 'sending' ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink)' }}>
+                        <StatusDot color={c.status === 'done' ? 'var(--ok)' : c.status === 'sending' ? 'var(--warn)' : 'var(--ink-3)'}/>
                         {c.status}
                       </span>
                     </td>

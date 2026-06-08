@@ -5,30 +5,31 @@ import { fmtCurrency, fmtDateTime, fmtDate, timeAgo } from '@/lib/helpers'
 
 const METHODS = ['cash', 'momo', 'card', 'bank']
 
+const Dot = ({ color }) => (
+  <span style={{ width:6, height:6, borderRadius:'50%', background:color, display:'inline-block', flexShrink:0 }}/>
+)
+
 export default function Finance({ sb, staff, leads, user }) {
   const [tab, setTab] = useState('payments')
 
-  // ── Payments tab state ─────────────────────────────────────────────────────
-  const [payments, setPayments] = useState([])
+  const [payments, setPayments]     = useState([])
   const [loadingPay, setLoadingPay] = useState(true)
-  const [filter, setFilter] = useState('all')
-  const [range, setRange] = useState('all')
+  const [filter, setFilter]         = useState('all')
+  const [range, setRange]           = useState('all')
 
-  // ── Fees tab state ─────────────────────────────────────────────────────────
-  const [cohorts, setCohorts] = useState([])
+  const [cohorts, setCohorts]               = useState([])
   const [selectedCohort, setSelectedCohort] = useState('')
-  const [feeRows, setFeeRows] = useState([]) // merged enrolments + invoices
-  const [loadingFees, setLoadingFees] = useState(false)
-  const [editingFee, setEditingFee] = useState(null)
-  const [savingFee, setSavingFee] = useState(false)
+  const [feeRows, setFeeRows]               = useState([])
+  const [loadingFees, setLoadingFees]       = useState(false)
+  const [editingFee, setEditingFee]         = useState(null)
+  const [savingFee, setSavingFee]           = useState(false)
 
-  // ── Pending Cash tab state ─────────────────────────────────────────────────
-  const [pendingCash, setPendingCash] = useState([])
-  const [loadingCash, setLoadingCash] = useState(false)
-  const [recordingTxn, setRecordingTxn] = useState(null)
-  const [recordForm, setRecordForm] = useState({ amount: '', method: 'cash', reference: '' })
-  const [recording, setRecording] = useState(false)
-  const [receiptData, setReceiptData] = useState(null)
+  const [pendingCash, setPendingCash]     = useState([])
+  const [loadingCash, setLoadingCash]     = useState(false)
+  const [recordingTxn, setRecordingTxn]   = useState(null)
+  const [recordForm, setRecordForm]       = useState({ amount: '', method: 'cash', reference: '' })
+  const [recording, setRecording]         = useState(false)
+  const [receiptData, setReceiptData]     = useState(null)
 
   const now = new Date()
   const marketers = staff.filter(s => s.role === 'marketer')
@@ -38,7 +39,6 @@ export default function Finance({ sb, staff, leads, user }) {
   useEffect(() => { if (tab === 'pending_cash') loadPendingCash() }, [tab])
   useEffect(() => { if (selectedCohort) loadCohortFees(selectedCohort) }, [selectedCohort])
 
-  // ── Data loaders ───────────────────────────────────────────────────────────
   const loadPayments = async () => {
     setLoadingPay(true)
     const { data } = await sb.from('payments')
@@ -59,8 +59,6 @@ export default function Finance({ sb, staff, leads, user }) {
       sb.from('enrolments').select('*, lead:lead_id(id,name,phone)').eq('cohort_id', cohortId).eq('rsvp_status', 'confirmed'),
       sb.from('school_fee_invoices').select('*').eq('cohort_id', cohortId),
     ])
-
-    // Also get invoices by lead_id as fallback
     const leadIds = (enrData || []).map(e => e.lead_id).filter(Boolean)
     let allInvoices = invoiceData || []
     if (leadIds.length && !allInvoices.length) {
@@ -68,10 +66,8 @@ export default function Finance({ sb, staff, leads, user }) {
         .select('*').in('lead_id', leadIds).neq('status', 'paid')
       allInvoices = byLead || []
     }
-
     const merged = (enrData || []).map(e => ({
-      ...e,
-      invoice: allInvoices.find(i => i.lead_id === e.lead_id) || null,
+      ...e, invoice: allInvoices.find(i => i.lead_id === e.lead_id) || null,
     }))
     setFeeRows(merged)
     setLoadingFees(false)
@@ -87,7 +83,6 @@ export default function Finance({ sb, staff, leads, user }) {
     setLoadingCash(false)
   }
 
-  // ── Fee management helpers ─────────────────────────────────────────────────
   const openFeeEdit = (row) => {
     const inv = row.invoice
     setEditingFee({
@@ -107,45 +102,32 @@ export default function Finance({ sb, staff, leads, user }) {
   const saveFee = async () => {
     if (!editingFee.total_fee) return
     setSavingFee(true)
-
-    const grossFee = Number(editingFee.total_fee)
+    const grossFee   = Number(editingFee.total_fee)
     const scholarship = Number(editingFee.scholarship_amount || 0)
-    const discount = Number(editingFee.discount_amount || 0)
-    const netFee = grossFee - scholarship - discount
-    const prevPaid = editingFee.invoice_id
+    const discount   = Number(editingFee.discount_amount || 0)
+    const netFee     = grossFee - scholarship - discount
+    const prevPaid   = editingFee.invoice_id
       ? Number((await sb.from('school_fee_invoices').select('amount_paid').eq('id', editingFee.invoice_id).single()).data?.amount_paid || 0)
       : 0
     const balance = Math.max(0, netFee - prevPaid)
-
     const payload = {
-      lead_id: editingFee.lead_id,
-      cohort_id: editingFee.cohort_id,
-      student_name: editingFee.student_name,
-      phone: editingFee.student_phone,
-      course: editingFee.course,
-      total_fee: grossFee,
-      scholarship_amount: scholarship,
-      discount_amount: discount,
-      net_fee: netFee,
-      balance,
-      amount_paid: prevPaid,
+      lead_id: editingFee.lead_id, cohort_id: editingFee.cohort_id,
+      student_name: editingFee.student_name, phone: editingFee.student_phone,
+      course: editingFee.course, total_fee: grossFee, scholarship_amount: scholarship,
+      discount_amount: discount, net_fee: netFee, balance, amount_paid: prevPaid,
       status: prevPaid >= netFee ? 'paid' : prevPaid > 0 ? 'partial' : 'pending',
-      notes: editingFee.notes,
-      updated_at: new Date().toISOString(),
+      notes: editingFee.notes, updated_at: new Date().toISOString(),
     }
-
     if (editingFee.invoice_id) {
       await sb.from('school_fee_invoices').update(payload).eq('id', editingFee.invoice_id)
     } else {
       await sb.from('school_fee_invoices').insert(payload)
     }
-
     setSavingFee(false)
     setEditingFee(null)
     loadCohortFees(selectedCohort)
   }
 
-  // ── Record cash payment ────────────────────────────────────────────────────
   const recordPayment = async () => {
     if (!recordForm.amount) return
     setRecording(true)
@@ -154,12 +136,9 @@ export default function Finance({ sb, staff, leads, user }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transaction_id: recordingTxn.id,
-          invoice_id: recordingTxn.invoice_id,
-          lead_id: recordingTxn.lead_id,
-          amount: Number(recordForm.amount),
-          method: recordForm.method,
-          reference: recordForm.reference,
+          transaction_id: recordingTxn.id, invoice_id: recordingTxn.invoice_id,
+          lead_id: recordingTxn.lead_id, amount: Number(recordForm.amount),
+          method: recordForm.method, reference: recordForm.reference,
           recorded_by_id: user?.id,
         }),
       })
@@ -211,14 +190,17 @@ export default function Finance({ sb, staff, leads, user }) {
     w.document.close()
   }
 
-  // ── Render helpers ─────────────────────────────────────────────────────────
-  const feeStatus = (inv) => {
+  const feeStatusBadge = (inv) => {
     if (!inv) return null
-    const colors = { paid: 'bg-emerald-50 text-emerald-700', partial: 'bg-amber-50 text-amber-700', pending: 'bg-slate-100 text-slate-500' }
-    return <span className={`badge ${colors[inv.status] || 'bg-slate-100 text-slate-400'}`}>{inv.status}</span>
+    const map = { paid: { c:'var(--ok)', l:'Paid' }, partial: { c:'var(--warn)', l:'Part-paid' }, pending: { c:'var(--ink-3)', l:'Pending' } }
+    const s = map[inv.status] || { c:'var(--ink-3)', l: inv.status }
+    return (
+      <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink)' }}>
+        <Dot color={s.c}/>{s.l}
+      </span>
+    )
   }
 
-  // ── Payments tab ──────────────────────────────────────────────────────────
   const filtered = payments.filter(p => {
     if (filter !== 'all' && p.lead?.assigned_to !== filter) return false
     if (range === 'month') {
@@ -232,6 +214,7 @@ export default function Finance({ sb, staff, leads, user }) {
     const mp = filtered.filter(p => p.lead?.assigned_to === m.id)
     return { ...m, count: mp.length, revenue: mp.reduce((s, p) => s + Number(p.amount || 0), 0) }
   }).filter(m => m.count > 0).sort((a, b) => b.revenue - a.revenue)
+
   const exportCSV = () => {
     const rows = [['Date','Lead Name','Phone','Course','Marketer','Amount (GHS)','Reference','Status'],
       ...filtered.map(p => [fmtDate(p.paid_at),p.lead?.name||'',p.lead?.phone||'',p.lead?.course_interest||'',p.lead?.assignee?.name||'',p.amount,p.reference,p.status])]
@@ -242,88 +225,124 @@ export default function Finance({ sb, staff, leads, user }) {
     a.click()
   }
 
+  const TABS = [
+    { id: 'payments', label: 'Payments' },
+    { id: 'fees', label: 'Student Fees' },
+    { id: 'pending_cash', label: `Pending Cash${pendingCash.length ? ` (${pendingCash.length})` : ''}` },
+  ]
+
   return (
     <div className="fade-up space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Finance</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Payments, student fees & commission tracking</p>
+          <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)' }}>Finance</h1>
+          <p style={{ fontSize:12.5, color:'var(--ink-3)', marginTop:2 }}>Payments, student fees & commission tracking</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 gap-0">
-        {[
-          { id: 'payments', label: 'Payments', icon: '💳' },
-          { id: 'fees', label: 'Student Fees', icon: '🧾' },
-          { id: 'pending_cash', label: `Pending Cash${pendingCash.length ? ` (${pendingCash.length})` : ''}`, icon: '💵' },
-        ].map(t => (
+      <div style={{ display:'flex', borderBottom:'1px solid var(--border)', gap:0 }}>
+        {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition ${tab === t.id ? 'border-blue-600 text-blue-700 bg-blue-50/50' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            {t.icon} {t.label}
+            style={{
+              padding:'10px 16px', fontSize:12, fontWeight:600, border:'none', borderBottom:`2px solid ${tab === t.id ? 'var(--accent)' : 'transparent'}`,
+              background: tab === t.id ? 'var(--accent-wash)' : 'transparent',
+              color: tab === t.id ? 'var(--accent)' : 'var(--ink-2)', cursor:'pointer', transition:'all .12s',
+            }}>
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Payments Tab ──────────────────────────────────────────────────── */}
+      {/* ── Payments Tab ── */}
       {tab === 'payments' && (
         <>
           {loadingPay ? <Spinner size={24}/> : (
             <>
-              <div className="flex justify-end"><button onClick={exportCSV} className="btn btn-ghost btn-sm">{Icon.download} Export CSV</button></div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="stat-card"><div className="text-2xl mb-1">💰</div><div className="stat-value text-emerald-600">{fmtCurrency(totalRevenue)}</div><div className="stat-label">Total Revenue</div></div>
-                <div className="stat-card"><div className="text-2xl mb-1">🧾</div><div className="stat-value">{filtered.length}</div><div className="stat-label">Payments</div></div>
-                <div className="stat-card"><div className="text-2xl mb-1">👤</div><div className="stat-value">{byMarketer.length}</div><div className="stat-label">Active Marketers</div></div>
-                <div className="stat-card"><div className="text-2xl mb-1">📊</div><div className="stat-value">{byMarketer.length > 0 ? fmtCurrency(totalRevenue / byMarketer.length) : fmtCurrency(0)}</div><div className="stat-label">Avg / Marketer</div></div>
+              <div className="flex justify-end">
+                <button onClick={exportCSV} className="btn btn-ghost btn-sm">{Icon.download} Export CSV</button>
               </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="stat-card"><div className="stat-value" style={{ color:'var(--ok)' }}>{fmtCurrency(totalRevenue)}</div><div className="stat-label">Total Revenue</div></div>
+                <div className="stat-card"><div className="stat-value">{filtered.length}</div><div className="stat-label">Payments</div></div>
+                <div className="stat-card"><div className="stat-value">{byMarketer.length}</div><div className="stat-label">Active Marketers</div></div>
+                <div className="stat-card"><div className="stat-value">{byMarketer.length > 0 ? fmtCurrency(totalRevenue / byMarketer.length) : fmtCurrency(0)}</div><div className="stat-label">Avg / Marketer</div></div>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <select value={filter} onChange={e => setFilter(e.target.value)} className="inp h-9 text-xs w-auto">
                   <option value="all">All Marketers</option>
                   {marketers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+                <div style={{ display:'flex', borderRadius:'var(--r)', border:'1px solid var(--border)', overflow:'hidden' }}>
                   {[['all','All Time'],['month','This Month']].map(([v,l]) => (
-                    <button key={v} onClick={() => setRange(v)} className={`px-3 py-1.5 text-xs font-medium transition ${range === v ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>{l}</button>
+                    <button key={v} onClick={() => setRange(v)}
+                      style={{ padding:'6px 12px', fontSize:12, fontWeight:500, border:'none', cursor:'pointer', transition:'background .1s',
+                        background: range === v ? 'var(--ink)' : 'var(--panel)', color: range === v ? '#fff' : 'var(--ink-2)' }}>
+                      {l}
+                    </button>
                   ))}
                 </div>
               </div>
+
               {byMarketer.length > 0 && (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {byMarketer.map((m, i) => (
                     <div key={m.id} className="card p-4">
                       <div className="flex items-center gap-2.5 mb-3">
-                        <div className="text-[10px] text-slate-300 font-bold w-4">#{i+1}</div>
+                        <div style={{ fontSize:10, color:'var(--ink-3)', fontWeight:700, width:16 }}>#{i+1}</div>
                         <Avatar name={m.name} size={32}/>
-                        <div><div className="text-sm font-semibold text-slate-900">{m.name}</div><div className="text-[10px] text-slate-400">Marketer</div></div>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>{m.name}</div>
+                          <div style={{ fontSize:10, color:'var(--ink-3)' }}>Marketer</div>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-center">
-                        <div className="bg-emerald-50 rounded-lg p-2"><div className="text-sm font-bold text-emerald-700">{fmtCurrency(m.revenue)}</div><div className="text-[10px] text-emerald-600">Revenue</div></div>
-                        <div className="bg-blue-50 rounded-lg p-2"><div className="text-lg font-bold text-blue-700">{m.count}</div><div className="text-[10px] text-blue-600">Registrations</div></div>
+                        <div style={{ borderRadius:4, padding:8, background:'var(--accent-wash)', border:'1px solid var(--border)' }}>
+                          <div style={{ fontSize:13, fontWeight:700, color:'var(--ok)' }}>{fmtCurrency(m.revenue)}</div>
+                          <div style={{ fontSize:10, color:'var(--ink-3)' }}>Revenue</div>
+                        </div>
+                        <div style={{ borderRadius:4, padding:8, background:'var(--bg)', border:'1px solid var(--border)' }}>
+                          <div style={{ fontSize:17, fontWeight:700, color:'var(--info)' }}>{m.count}</div>
+                          <div style={{ fontSize:10, color:'var(--ink-3)' }}>Registrations</div>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+
               <div className="card overflow-hidden">
-                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-slate-900">Payment Ledger</h2>
-                  <span className="text-xs text-slate-400">{filtered.length} records</span>
+                <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <h2 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Payment Ledger</h2>
+                  <span style={{ fontSize:12, color:'var(--ink-3)' }}>{filtered.length} records</span>
                 </div>
-                {filtered.length === 0 ? <EmptyState icon="💳" title="No payments yet"/> : (
+                {filtered.length === 0 ? <EmptyState title="No payments yet"/> : (
                   <div className="overflow-x-auto">
                     <table className="data-table">
                       <thead><tr><th>Date</th><th>Student</th><th>Course</th><th>Marketer</th><th>Amount</th><th>Reference</th><th>Status</th></tr></thead>
                       <tbody>
                         {filtered.map(p => (
                           <tr key={p.id}>
-                            <td className="text-xs text-slate-500">{fmtDateTime(p.paid_at)}</td>
-                            <td><div className="font-medium text-slate-900 text-sm">{p.lead?.name}</div><div className="text-[10px] text-slate-400">{p.lead?.phone}</div></td>
-                            <td className="text-xs text-slate-600 max-w-[140px] truncate">{p.lead?.course_interest || '—'}</td>
-                            <td>{p.lead?.assignee ? <div className="flex items-center gap-1.5"><Avatar name={p.lead.assignee.name} size={22}/><span className="text-xs text-slate-600">{p.lead.assignee.name}</span></div> : <span className="text-slate-300 text-xs">—</span>}</td>
-                            <td className="font-bold text-emerald-700">{fmtCurrency(p.amount)}</td>
-                            <td className="font-mono text-[11px] text-slate-400">{p.reference}</td>
-                            <td><span className={`badge ${p.status === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span></td>
+                            <td style={{ fontSize:12, color:'var(--ink-2)' }}>{fmtDateTime(p.paid_at)}</td>
+                            <td>
+                              <div style={{ fontWeight:500, color:'var(--ink)', fontSize:13 }}>{p.lead?.name}</div>
+                              <div style={{ fontSize:10, color:'var(--ink-3)' }}>{p.lead?.phone}</div>
+                            </td>
+                            <td style={{ fontSize:12, color:'var(--ink-2)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.lead?.course_interest || '—'}</td>
+                            <td>
+                              {p.lead?.assignee
+                                ? <div className="flex items-center gap-1.5"><Avatar name={p.lead.assignee.name} size={22}/><span style={{ fontSize:12, color:'var(--ink-2)' }}>{p.lead.assignee.name}</span></div>
+                                : <span style={{ fontSize:12, color:'var(--ink-3)' }}>—</span>}
+                            </td>
+                            <td style={{ fontWeight:700, color:'var(--ok)' }}>{fmtCurrency(p.amount)}</td>
+                            <td style={{ fontFamily:'monospace', fontSize:11, color:'var(--ink-3)' }}>{p.reference}</td>
+                            <td>
+                              <span style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink)' }}>
+                                <Dot color={p.status === 'success' ? 'var(--ok)' : 'var(--ink-3)'}/>
+                                {p.status}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -336,78 +355,58 @@ export default function Finance({ sb, staff, leads, user }) {
         </>
       )}
 
-      {/* ── Fees Tab ──────────────────────────────────────────────────────── */}
+      {/* ── Fees Tab ── */}
       {tab === 'fees' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Student Fee Management</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Set and manage individual course fees per cohort</p>
+              <h2 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Student Fee Management</h2>
+              <p style={{ fontSize:12, color:'var(--ink-3)', marginTop:2 }}>Set and manage individual course fees per cohort</p>
             </div>
-            <select
-              value={selectedCohort}
-              onChange={e => setSelectedCohort(e.target.value)}
-              className="inp h-9 text-xs w-auto"
-            >
+            <select value={selectedCohort} onChange={e => setSelectedCohort(e.target.value)} className="inp h-9 text-xs w-auto">
               <option value="">Select a cohort…</option>
               {cohorts.map(c => <option key={c.id} value={c.id}>{c.course_name}</option>)}
             </select>
           </div>
 
           {!selectedCohort ? (
-            <EmptyState icon="🎓" title="Select a cohort above" sub="Then set fees for each enrolled student"/>
+            <EmptyState title="Select a cohort above" sub="Then set fees for each enrolled student"/>
           ) : loadingFees ? <Spinner size={24}/> : feeRows.length === 0 ? (
-            <EmptyState icon="👥" title="No confirmed enrolments" sub="Students must be enrolled and RSVP confirmed first"/>
+            <EmptyState title="No confirmed enrolments" sub="Students must be enrolled and RSVP confirmed first"/>
           ) : (
             <div className="card overflow-hidden">
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900">
+              <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <h3 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>
                   {cohorts.find(c => c.id === selectedCohort)?.course_name} — {feeRows.length} students
                 </h3>
-                <div className="text-xs text-slate-400">
-                  {feeRows.filter(r => r.invoice).length} fees set
-                </div>
+                <div style={{ fontSize:12, color:'var(--ink-3)' }}>{feeRows.filter(r => r.invoice).length} fees set</div>
               </div>
               <div className="overflow-x-auto">
                 <table className="data-table">
                   <thead>
-                    <tr>
-                      <th>Student</th>
-                      <th>Total Fee</th>
-                      <th className="hidden sm:table-cell">Scholarship</th>
-                      <th className="hidden sm:table-cell">Discount</th>
-                      <th>Paid</th>
-                      <th>Balance</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
+                    <tr><th>Student</th><th>Total Fee</th><th className="hidden sm:table-cell">Scholarship</th><th className="hidden sm:table-cell">Discount</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr>
                   </thead>
                   <tbody>
                     {feeRows.map(row => {
                       const inv = row.invoice
-                      const netFee = inv ? Number(inv.total_fee) - Number(inv.scholarship_amount || 0) - Number(inv.discount_amount || 0) : 0
                       return (
                         <tr key={row.id || row.lead_id}>
                           <td>
                             <div className="flex items-center gap-2">
                               <Avatar name={row.lead?.name || row.student_name} size={28}/>
                               <div>
-                                <div className="text-sm font-medium text-slate-900">{row.lead?.name || row.student_name}</div>
-                                <div className="text-[10px] text-slate-400">{row.lead?.phone || '—'}</div>
+                                <div style={{ fontSize:13, fontWeight:500, color:'var(--ink)' }}>{row.lead?.name || row.student_name}</div>
+                                <div style={{ fontSize:10, color:'var(--ink-3)' }}>{row.lead?.phone || '—'}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="font-semibold text-slate-900">{inv ? fmtCurrency(inv.total_fee) : <span className="text-slate-300 text-xs">—</span>}</td>
-                          <td className="hidden sm:table-cell text-purple-700 text-xs">{inv && Number(inv.scholarship_amount) > 0 ? fmtCurrency(inv.scholarship_amount) : '—'}</td>
-                          <td className="hidden sm:table-cell text-emerald-700 text-xs">{inv && Number(inv.discount_amount) > 0 ? fmtCurrency(inv.discount_amount) : '—'}</td>
-                          <td className="text-emerald-700 font-semibold">{inv ? fmtCurrency(inv.amount_paid || 0) : '—'}</td>
-                          <td className="font-bold text-blue-700">{inv ? fmtCurrency(inv.balance || 0) : '—'}</td>
-                          <td>{inv ? feeStatus(inv) : <span className="text-[10px] text-slate-300">No fee</span>}</td>
-                          <td>
-                            <button onClick={() => openFeeEdit(row)} className="btn btn-ghost btn-sm">
-                              {inv ? 'Edit' : '+ Set'}
-                            </button>
-                          </td>
+                          <td style={{ fontWeight:600, color:'var(--ink)' }}>{inv ? fmtCurrency(inv.total_fee) : <span style={{ fontSize:12, color:'var(--ink-3)' }}>—</span>}</td>
+                          <td className="hidden sm:table-cell" style={{ color:'var(--accent)', fontSize:12 }}>{inv && Number(inv.scholarship_amount) > 0 ? fmtCurrency(inv.scholarship_amount) : '—'}</td>
+                          <td className="hidden sm:table-cell" style={{ color:'var(--ok)', fontSize:12 }}>{inv && Number(inv.discount_amount) > 0 ? fmtCurrency(inv.discount_amount) : '—'}</td>
+                          <td style={{ fontWeight:600, color:'var(--ok)' }}>{inv ? fmtCurrency(inv.amount_paid || 0) : '—'}</td>
+                          <td style={{ fontWeight:700, color:'var(--info)' }}>{inv ? fmtCurrency(inv.balance || 0) : '—'}</td>
+                          <td>{inv ? feeStatusBadge(inv) : <span style={{ fontSize:10, color:'var(--ink-3)' }}>No fee</span>}</td>
+                          <td><button onClick={() => openFeeEdit(row)} className="btn btn-ghost btn-sm">{inv ? 'Edit' : '+ Set'}</button></td>
                         </tr>
                       )
                     })}
@@ -417,7 +416,6 @@ export default function Finance({ sb, staff, leads, user }) {
             </div>
           )}
 
-          {/* Edit/Set Fee Modal */}
           {editingFee && (
             <Modal title={`${editingFee.invoice_id ? 'Edit' : 'Set'} Fee — ${editingFee.student_name}`} onClose={() => setEditingFee(null)}>
               <div className="space-y-4">
@@ -439,7 +437,7 @@ export default function Finance({ sb, staff, leads, user }) {
                   </div>
                   <div>
                     <Label>Net Fee (computed)</Label>
-                    <div className="inp bg-slate-50 font-bold text-blue-700 flex items-center">
+                    <div className="inp flex items-center" style={{ background:'var(--bg)', fontWeight:700, color:'var(--info)' }}>
                       {fmtCurrency(Math.max(0, Number(editingFee.total_fee || 0) - Number(editingFee.scholarship_amount || 0) - Number(editingFee.discount_amount || 0)))}
                     </div>
                   </div>
@@ -458,41 +456,41 @@ export default function Finance({ sb, staff, leads, user }) {
         </div>
       )}
 
-      {/* ── Pending Cash Tab ──────────────────────────────────────────────── */}
+      {/* ── Pending Cash Tab ── */}
       {tab === 'pending_cash' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-bold text-slate-900">Pending Cash Payments</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Students who selected "Pay Cash" at class. Record their payment here.</p>
+              <h2 style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Pending Cash Payments</h2>
+              <p style={{ fontSize:12, color:'var(--ink-3)', marginTop:2 }}>Students who selected "Pay Cash" at class. Record their payment here.</p>
             </div>
-            <button onClick={loadPendingCash} className="btn btn-ghost btn-sm">{Icon.back && null}↺ Refresh</button>
+            <button onClick={loadPendingCash} className="btn btn-ghost btn-sm">↺ Refresh</button>
           </div>
 
           {loadingCash ? <Spinner size={24}/> : pendingCash.length === 0 ? (
-            <EmptyState icon="💵" title="No pending cash payments" sub="Students who click 'Pay Cash' at class sign-in will appear here"/>
+            <EmptyState title="No pending cash payments" sub="Students who click 'Pay Cash' at class sign-in will appear here"/>
           ) : (
             <div className="card overflow-hidden">
-              <div className="divide-y divide-slate-50">
+              <div>
                 {pendingCash.map(txn => {
-                  const inv = txn.invoice
-                  const grossFee = Number(inv?.total_fee || 0)
+                  const inv       = txn.invoice
+                  const grossFee  = Number(inv?.total_fee || 0)
                   const scholarship = Number(inv?.scholarship_amount || 0)
-                  const discount = Number(inv?.discount_amount || 0)
-                  const netFee = grossFee - scholarship - discount
-                  const prevPaid = Number(inv?.amount_paid || 0)
-                  const balance = Math.max(0, netFee - prevPaid)
+                  const discount  = Number(inv?.discount_amount || 0)
+                  const netFee    = grossFee - scholarship - discount
+                  const prevPaid  = Number(inv?.amount_paid || 0)
+                  const balance   = Math.max(0, netFee - prevPaid)
 
                   return (
-                    <div key={txn.id} className="p-4 flex items-center gap-3 flex-wrap">
+                    <div key={txn.id} style={{ padding:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', borderBottom:'1px solid var(--border)' }}>
                       <Avatar name={txn.lead?.name || '?'} size={38}/>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-slate-900">{txn.lead?.name}</div>
-                        <div className="text-[11px] text-slate-400">{txn.lead?.phone || '—'} · {txn.invoice?.course || '—'}</div>
-                        <div className="text-[10px] text-amber-600 mt-0.5">{timeAgo(txn.created_at)} · Balance: {fmtCurrency(balance)}</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>{txn.lead?.name}</div>
+                        <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:2 }}>{txn.lead?.phone || '—'} · {txn.invoice?.course || '—'}</div>
+                        <div style={{ fontSize:10, color:'var(--warn)', marginTop:2 }}>{timeAgo(txn.created_at)} · Balance: {fmtCurrency(balance)}</div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-lg font-bold text-slate-900">{fmtCurrency(txn.amount || balance)}</div>
+                      <div style={{ textAlign:'right', flexShrink:0 }}>
+                        <div style={{ fontSize:17, fontWeight:700, color:'var(--ink)' }}>{fmtCurrency(txn.amount || balance)}</div>
                         <button
                           onClick={() => {
                             setRecordingTxn(txn)
@@ -510,17 +508,15 @@ export default function Finance({ sb, staff, leads, user }) {
             </div>
           )}
 
-          {/* Record Payment Modal */}
           {recordingTxn && (
             <Modal title={`Record Payment — ${recordingTxn.lead?.name}`} onClose={() => setRecordingTxn(null)}>
               <div className="space-y-4">
                 <div>
                   <Label>Amount Received (GH₵) *</Label>
-                  <input type="number" min="0" step="10"
-                    value={recordForm.amount}
+                  <input type="number" min="0" step="10" value={recordForm.amount}
                     onChange={e => setRecordForm(f => ({ ...f, amount: e.target.value }))}
                     className="inp text-lg font-bold"/>
-                  <p className="text-[10px] text-slate-400 mt-1">Can be partial — student will be prompted to pay remaining balance next class.</p>
+                  <p style={{ fontSize:10, color:'var(--ink-3)', marginTop:4 }}>Can be partial — student will be prompted to pay remaining balance next class.</p>
                 </div>
                 <div>
                   <Label>Payment Method</Label>
@@ -542,25 +538,25 @@ export default function Finance({ sb, staff, leads, user }) {
             </Modal>
           )}
 
-          {/* Receipt after recording */}
           {receiptData && (
-            <Modal title="Payment Recorded ✅" onClose={() => setReceiptData(null)}>
+            <Modal title="Payment Recorded" onClose={() => setReceiptData(null)}>
               <div className="text-center py-2 space-y-4">
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                  <div className="text-xs text-emerald-700 font-semibold uppercase tracking-wider mb-1">Receipt</div>
-                  <div className="text-xl font-black text-emerald-800 font-mono">{receiptData.receipt_no}</div>
-                  <div className="text-sm text-emerald-700 mt-1">{receiptData.student_name} · {fmtCurrency(receiptData.amount_paid)}</div>
-                  <div className="text-xs text-emerald-600 mt-0.5">Balance: {fmtCurrency(receiptData.new_balance)}</div>
+                <div style={{ borderRadius:'var(--r)', border:'1px solid var(--border)', background:'var(--accent-wash)', padding:16 }}>
+                  <div style={{ fontSize:11, color:'var(--accent)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em', marginBottom:4 }}>Receipt</div>
+                  <div style={{ fontSize:20, fontWeight:900, color:'var(--ink)', fontFamily:'monospace' }}>{receiptData.receipt_no}</div>
+                  <div style={{ fontSize:13, color:'var(--ok)', marginTop:4 }}>{receiptData.student_name} · {fmtCurrency(receiptData.amount_paid)}</div>
+                  <div style={{ fontSize:12, color:'var(--ink-2)', marginTop:2 }}>Balance: {fmtCurrency(receiptData.new_balance)}</div>
                 </div>
-                <p className="text-xs text-slate-400">An SMS has been sent to the student automatically.</p>
+                <p style={{ fontSize:12, color:'var(--ink-3)' }}>An SMS has been sent to the student automatically.</p>
                 <div className="space-y-2">
                   <button onClick={() => sendWAReceipt(receiptData)}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-bold press transition">
-                    📱 Send Receipt via WhatsApp
+                    style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:12, borderRadius:'var(--r)', background:'var(--ok)', color:'#fff', fontSize:13, fontWeight:700, border:'none', cursor:'pointer', transition:'opacity .1s' }}
+                    className="press">
+                    Send Receipt via WhatsApp
                   </button>
                   <button onClick={() => printReceipt(receiptData)}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-slate-200 text-slate-700 text-sm font-bold press transition">
-                    🖨️ Print / Save PDF
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-[var(--border)] text-[var(--ink)] text-sm font-bold press transition">
+                    Print / Save PDF
                   </button>
                 </div>
               </div>

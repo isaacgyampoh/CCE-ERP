@@ -40,12 +40,12 @@ function autoDetect(headers) {
 }
 
 export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
-  const [step, setStep] = useState('upload') // upload | map | preview | done
+  const [step, setStep]       = useState('upload')
   const [rawRows, setRawRows] = useState([])
   const [headers, setHeaders] = useState([])
   const [mapping, setMapping] = useState({})
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState(null)
+  const [result, setResult]   = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const fileRef = useRef(null)
 
@@ -73,9 +73,9 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
     return lead
   }).filter(r => r.name?.trim())
 
-  const validRows = mappedRows.filter(r => r.name?.trim())
-  const duplicates = validRows.filter(r => r.phone && existingPhones.has(r.phone.replace(/\s/g, '')))
-  const newRows = validRows.filter(r => !r.phone || !existingPhones.has(r.phone.replace(/\s/g, '')))
+  const validRows   = mappedRows.filter(r => r.name?.trim())
+  const duplicates  = validRows.filter(r => r.phone && existingPhones.has(r.phone.replace(/\s/g, '')))
+  const newRows     = validRows.filter(r => !r.phone || !existingPhones.has(r.phone.replace(/\s/g, '')))
 
   const doImport = async () => {
     if (!newRows.length) return
@@ -108,30 +108,37 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
   if (step === 'upload') return (
     <div className="fade-up max-w-lg">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-900">Import Leads from CSV</h1>
-        <p className="text-sm text-slate-400 mt-1">Upload a CSV file to bulk-import leads. Duplicates (by phone) are skipped automatically.</p>
+        <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)' }}>Import Leads from CSV</h1>
+        <p style={{ fontSize:12.5, color:'var(--ink-3)', marginTop:4 }}>Upload a CSV file to bulk-import leads. Duplicates (by phone) are skipped automatically.</p>
       </div>
       <div
         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]) }}
         onClick={() => fileRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition
-          ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'}`}
+        style={{
+          borderRadius: 12,
+          border: `2px dashed ${dragOver ? 'var(--accent)' : 'var(--border-strong)'}`,
+          background: dragOver ? 'var(--accent-wash)' : 'var(--panel)',
+          padding: '48px 24px',
+          textAlign: 'center',
+          cursor: 'pointer',
+          transition: 'border-color .15s, background .15s',
+        }}
       >
-        <div className="text-4xl mb-3">📂</div>
-        <div className="text-sm font-semibold text-slate-700">Click to upload or drag & drop</div>
-        <div className="text-xs text-slate-400 mt-1">CSV files only • Any column order</div>
+        <div style={{ fontSize:36, marginBottom:12 }}>📂</div>
+        <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Click to upload or drag & drop</div>
+        <div style={{ fontSize:12, color:'var(--ink-3)', marginTop:4 }}>CSV files only · Any column order</div>
         <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => handleFile(e.target.files[0])}/>
       </div>
-      <div className="mt-4 card p-4">
-        <div className="text-xs font-bold text-slate-500 mb-2">Expected columns (any order)</div>
-        <div className="flex flex-wrap gap-1.5">
+      <div style={{ marginTop:16 }} className="card p-4">
+        <div style={{ fontSize:11, fontWeight:700, color:'var(--ink-2)', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:8 }}>Expected columns (any order)</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
           {['name', 'phone', 'email', 'course', 'source', 'city', 'notes'].map(c => (
-            <span key={c} className="text-[10px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{c}</span>
+            <span key={c} className="tag">{c}</span>
           ))}
         </div>
-        <div className="text-[10px] text-slate-400 mt-2">Only "name" is required. Headers are matched automatically.</div>
+        <div style={{ fontSize:10, color:'var(--ink-3)', marginTop:8 }}>Only "name" is required. Headers are matched automatically.</div>
       </div>
     </div>
   )
@@ -140,8 +147,8 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
     <div className="fade-up max-w-2xl space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Column Mapping</h1>
-          <p className="text-sm text-slate-400 mt-0.5">{rawRows.length} rows found • Map your columns below</p>
+          <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)' }}>Column Mapping</h1>
+          <p style={{ fontSize:12.5, color:'var(--ink-3)', marginTop:2 }}>{rawRows.length} rows found · Map your columns below</p>
         </div>
         <button onClick={() => setStep('upload')} className="btn btn-ghost btn-sm">← Back</button>
       </div>
@@ -149,7 +156,7 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
       <div className="card p-4 space-y-3">
         {Object.keys(COLUMN_MAP).map(field => (
           <div key={field} className="flex items-center gap-3">
-            <div className="w-32 text-xs font-semibold text-slate-600 capitalize">{field.replace(/_/g, ' ')}</div>
+            <div style={{ width:128, fontSize:12, fontWeight:600, color:'var(--ink-2)', textTransform:'capitalize' }}>{field.replace(/_/g, ' ')}</div>
             <select
               value={mapping[field] || ''}
               onChange={e => setMapping(m => ({ ...m, [field]: e.target.value }))}
@@ -158,14 +165,14 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
               <option value="">— skip —</option>
               {headers.map(h => <option key={h} value={h}>{h}</option>)}
             </select>
-            {mapping[field] && <span className="text-[10px] text-emerald-600 font-semibold shrink-0">✓ mapped</span>}
+            {mapping[field] && <span style={{ fontSize:10, color:'var(--ok)', fontWeight:600, flexShrink:0 }}>✓ mapped</span>}
           </div>
         ))}
       </div>
 
       {!mapping.name && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs text-red-700 font-semibold">
-          ⚠ You must map the "Name" column to continue.
+        <div style={{ borderRadius:'var(--r)', border:'1px solid var(--border)', background:'#fdf2f2', padding:'10px 16px', fontSize:12, color:'var(--bad)', fontWeight:600 }}>
+          You must map the "Name" column to continue.
         </div>
       )}
 
@@ -183,42 +190,44 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
     <div className="fade-up space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Preview & Confirm</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Review before importing</p>
+          <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)' }}>Preview & Confirm</h1>
+          <p style={{ fontSize:12.5, color:'var(--ink-3)', marginTop:2 }}>Review before importing</p>
         </div>
         <button onClick={() => setStep('map')} className="btn btn-ghost btn-sm">← Back</button>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
         <div className="stat-card">
-          <div className="stat-value text-blue-600">{validRows.length}</div>
+          <div className="stat-value" style={{ color:'var(--info)' }}>{validRows.length}</div>
           <div className="stat-label">Total valid rows</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value text-emerald-600">{newRows.length}</div>
+          <div className="stat-value" style={{ color:'var(--ok)' }}>{newRows.length}</div>
           <div className="stat-label">Will be imported</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value text-amber-600">{duplicates.length}</div>
+          <div className="stat-value" style={{ color:'var(--warn)' }}>{duplicates.length}</div>
           <div className="stat-label">Duplicates (skipped)</div>
         </div>
       </div>
 
       {duplicates.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <div className="text-xs font-bold text-amber-800 mb-2">⚠ Duplicate phones — will be skipped</div>
-          <div className="flex flex-wrap gap-1.5">
+        <div style={{ borderRadius:'var(--r)', border:'1px solid var(--border)', background:'#fffbeb', padding:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'var(--warn)', marginBottom:8 }}>Duplicate phones — will be skipped</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
             {duplicates.slice(0, 8).map((r, i) => (
-              <span key={i} className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded">{r.name} ({r.phone})</span>
+              <span key={i} style={{ fontSize:10, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:4, padding:'2px 8px', color:'var(--ink-2)' }}>
+                {r.name} ({r.phone})
+              </span>
             ))}
-            {duplicates.length > 8 && <span className="text-[10px] text-amber-600">+{duplicates.length - 8} more</span>}
+            {duplicates.length > 8 && <span style={{ fontSize:10, color:'var(--warn)' }}>+{duplicates.length - 8} more</span>}
           </div>
         </div>
       )}
 
       <div className="card overflow-hidden">
-        <div className="p-3 border-b border-slate-100">
-          <div className="text-xs font-bold text-slate-500">First 15 rows preview</div>
+        <div style={{ padding:'8px 14px', borderBottom:'1px solid var(--border)' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'var(--ink-2)', textTransform:'uppercase', letterSpacing:'.04em' }}>First 15 rows preview</div>
         </div>
         <div className="overflow-x-auto">
           <table className="data-table">
@@ -236,15 +245,15 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
               {validRows.slice(0, 15).map((r, i) => {
                 const isDupe = r.phone && existingPhones.has(r.phone.replace(/\s/g, ''))
                 return (
-                  <tr key={i} className={isDupe ? 'opacity-40' : ''}>
-                    <td className="font-medium text-slate-900">
+                  <tr key={i} style={{ opacity: isDupe ? 0.4 : 1 }}>
+                    <td style={{ fontWeight:500, color:'var(--ink)' }}>
                       {r.name}
-                      {isDupe && <span className="ml-1 text-[9px] text-amber-500 font-bold">DUP</span>}
+                      {isDupe && <span style={{ marginLeft:4, fontSize:9, color:'var(--warn)', fontWeight:700 }}>DUP</span>}
                     </td>
-                    <td className="text-slate-500 text-xs">{r.phone || '—'}</td>
-                    <td className="hidden sm:table-cell text-slate-500 text-xs truncate max-w-[140px]">{r.email || '—'}</td>
-                    <td className="hidden md:table-cell text-slate-500 text-xs truncate max-w-[120px]">{r.course_interest || '—'}</td>
-                    <td><span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded capitalize">{r.source || 'manual'}</span></td>
+                    <td style={{ fontSize:12, color:'var(--ink-2)' }}>{r.phone || '—'}</td>
+                    <td className="hidden sm:table-cell" style={{ fontSize:12, color:'var(--ink-2)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.email || '—'}</td>
+                    <td className="hidden md:table-cell" style={{ fontSize:12, color:'var(--ink-2)', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.course_interest || '—'}</td>
+                    <td><span className="tag">{r.source || 'manual'}</span></td>
                     <td><Badge status="new"/></td>
                   </tr>
                 )
@@ -255,7 +264,7 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
       </div>
 
       {newRows.length === 0 ? (
-        <div className="bg-slate-50 rounded-xl p-6 text-center text-sm text-slate-400">
+        <div style={{ borderRadius:'var(--r)', background:'var(--bg)', border:'1px solid var(--border)', padding:'24px 16px', textAlign:'center', fontSize:13, color:'var(--ink-3)' }}>
           All rows are duplicates — nothing to import.
         </div>
       ) : (
@@ -268,19 +277,19 @@ export default function LeadImport({ sb, leads: existingLeads, onDone, user }) {
 
   if (step === 'done') return (
     <div className="fade-up max-w-md mx-auto text-center py-12">
-      <div className="text-5xl mb-4">🎉</div>
-      <h1 className="text-xl font-bold text-slate-900 mb-2">Import Complete!</h1>
+      <div style={{ fontSize:48, marginBottom:16 }}>🎉</div>
+      <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)', marginBottom:8 }}>Import Complete!</h1>
       <div className="grid grid-cols-3 gap-3 mt-6 mb-8">
         <div className="stat-card">
-          <div className="stat-value text-emerald-600">{result.inserted}</div>
+          <div className="stat-value" style={{ color:'var(--ok)' }}>{result.inserted}</div>
           <div className="stat-label">Imported</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value text-amber-600">{result.duplicates}</div>
+          <div className="stat-value" style={{ color:'var(--warn)' }}>{result.duplicates}</div>
           <div className="stat-label">Skipped</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value text-red-500">{result.failed}</div>
+          <div className="stat-value" style={{ color:'var(--bad)' }}>{result.failed}</div>
           <div className="stat-label">Failed</div>
         </div>
       </div>
