@@ -1,7 +1,8 @@
 -- ╔══════════════════════════════════════════════════════════╗
 -- ║  CCE ERP — COMPLETE DATABASE SCHEMA                     ║
 -- ║  Cambridge Center of Excellence                         ║
--- ║  Run this ONCE in Supabase SQL Editor                   ║
+-- ║  Run this ONCE in Supabase SQL Editor (fresh install)   ║
+-- ║  For existing DBs: run supabase-schema-migration.sql    ║
 -- ╚══════════════════════════════════════════════════════════╝
 
 -- ══ STAFF ══════════════════════════════════════════════════
@@ -51,6 +52,9 @@ CREATE TABLE IF NOT EXISTS leads (
   fb_lead_id TEXT DEFAULT '',
   linkedin_lead_id TEXT DEFAULT '',
   lead_score INT DEFAULT 0,
+  reg_fee_paid DECIMAL(10,2) DEFAULT 0,
+  reg_paid_at TIMESTAMPTZ,
+  school_fee_status TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -99,6 +103,9 @@ CREATE TABLE IF NOT EXISTS registrations (
   marketer_id UUID REFERENCES staff(id),
   marketer_name TEXT DEFAULT '',
   notes TEXT DEFAULT '',
+  school_fee_amount DECIMAL(10,2) DEFAULT 0,
+  school_fee_status TEXT DEFAULT '',
+  school_fee_due_date DATE,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -124,7 +131,8 @@ CREATE TABLE IF NOT EXISTS cohorts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
   course_name TEXT DEFAULT '',
-  name TEXT NOT NULL,
+  name TEXT DEFAULT '',
+  label TEXT DEFAULT '',
   mode TEXT DEFAULT 'in-person',
   start_date DATE,
   end_date DATE,
@@ -149,12 +157,17 @@ CREATE TABLE IF NOT EXISTS enrolments (
   lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
   registration_id UUID REFERENCES registrations(id) ON DELETE SET NULL,
   student_name TEXT NOT NULL,
+  student_phone TEXT DEFAULT '',
+  student_email TEXT DEFAULT '',
   phone TEXT DEFAULT '',
   email TEXT DEFAULT '',
   mode TEXT DEFAULT 'in-person',
   rsvp_status TEXT DEFAULT 'pending',
   rsvp_token TEXT DEFAULT '',
   rsvp_responded_at TIMESTAMPTZ,
+  reminder_1month_sent BOOLEAN DEFAULT false,
+  reminder_1week_sent BOOLEAN DEFAULT false,
+  reminder_2day_sent BOOLEAN DEFAULT false,
   status TEXT DEFAULT 'active',
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -164,10 +177,17 @@ CREATE TABLE IF NOT EXISTS class_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   cohort_id UUID REFERENCES cohorts(id) ON DELETE CASCADE,
   session_date DATE NOT NULL,
+  session_number INT DEFAULT 1,
   session_time TEXT DEFAULT '',
   topic TEXT DEFAULT '',
   attendance_open BOOLEAN DEFAULT false,
   attendance_code TEXT DEFAULT '',
+  class_code_inperson TEXT DEFAULT '',
+  class_code_online TEXT DEFAULT '',
+  attendance_opened_at TIMESTAMPTZ,
+  attendance_closed_at TIMESTAMPTZ,
+  attendance_link_sent BOOLEAN DEFAULT false,
+  attendance_link_sent_at TIMESTAMPTZ,
   opened_at TIMESTAMPTZ,
   closed_at TIMESTAMPTZ,
   opened_by UUID REFERENCES staff(id),
@@ -181,9 +201,14 @@ CREATE TABLE IF NOT EXISTS attendance (
   session_id UUID REFERENCES class_sessions(id) ON DELETE CASCADE,
   cohort_id UUID REFERENCES cohorts(id) ON DELETE CASCADE,
   enrolment_id UUID REFERENCES enrolments(id) ON DELETE SET NULL,
+  lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
   student_name TEXT NOT NULL,
+  student_phone TEXT DEFAULT '',
   phone TEXT DEFAULT '',
   mode TEXT DEFAULT 'in-person',
+  code_used TEXT DEFAULT '',
+  code_valid BOOLEAN DEFAULT false,
+  ip_address TEXT DEFAULT '',
   checked_in_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -208,9 +233,13 @@ CREATE TABLE IF NOT EXISTS school_fee_invoices (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   registration_id UUID REFERENCES registrations(id) ON DELETE SET NULL,
   lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
+  cohort_id UUID REFERENCES cohorts(id) ON DELETE SET NULL,
   student_name TEXT DEFAULT '',
   course TEXT DEFAULT '',
   total_fee DECIMAL(10,2) DEFAULT 0,
+  scholarship_amount DECIMAL(10,2) DEFAULT 0,
+  discount_amount DECIMAL(10,2) DEFAULT 0,
+  net_fee DECIMAL(10,2) DEFAULT 0,
   amount_paid DECIMAL(10,2) DEFAULT 0,
   balance DECIMAL(10,2) DEFAULT 0,
   due_date DATE,
@@ -223,6 +252,39 @@ CREATE TABLE IF NOT EXISTS school_fee_invoices (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ══ COURSE FEE PAYMENTS ═══════════════════════════════════
+CREATE TABLE IF NOT EXISTS course_fee_payments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  invoice_id UUID REFERENCES school_fee_invoices(id) ON DELETE SET NULL,
+  lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
+  amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  method TEXT DEFAULT 'cash',
+  status TEXT DEFAULT 'pending_cash',
+  reference TEXT DEFAULT '',
+  receipt_no TEXT DEFAULT '',
+  recorded_by UUID REFERENCES staff(id),
+  paid_at TIMESTAMPTZ,
+  notes TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ══ DOCUMENTS ═════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS documents (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT DEFAULT 'brochure',
+  description TEXT DEFAULT '',
+  file_name TEXT DEFAULT '',
+  file_url TEXT DEFAULT '',
+  file_size BIGINT DEFAULT 0,
+  trigger_event TEXT DEFAULT 'manual',
+  course TEXT DEFAULT '',
+  is_active BOOLEAN DEFAULT true,
+  sends_count INT DEFAULT 0,
+  created_by UUID REFERENCES staff(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ══ RECEIPTS ══════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS receipts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -231,6 +293,8 @@ CREATE TABLE IF NOT EXISTS receipts (
   lead_id UUID REFERENCES leads(id) ON DELETE SET NULL,
   receipt_no TEXT NOT NULL,
   student_name TEXT DEFAULT '',
+  student_email TEXT DEFAULT '',
+  student_phone TEXT DEFAULT '',
   amount DECIMAL(10,2) DEFAULT 0,
   payment_type TEXT DEFAULT '',
   sent_via TEXT DEFAULT '',
@@ -300,6 +364,8 @@ ALTER TABLE class_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admission_letters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE school_fee_invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_fee_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sms_log ENABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_log ENABLE ROW LEVEL SECURITY;
@@ -320,6 +386,8 @@ CREATE POLICY "all" ON class_sessions FOR ALL USING (true);
 CREATE POLICY "all" ON attendance FOR ALL USING (true);
 CREATE POLICY "all" ON admission_letters FOR ALL USING (true);
 CREATE POLICY "all" ON school_fee_invoices FOR ALL USING (true);
+CREATE POLICY "all" ON course_fee_payments FOR ALL USING (true);
+CREATE POLICY "all" ON documents FOR ALL USING (true);
 CREATE POLICY "all" ON receipts FOR ALL USING (true);
 CREATE POLICY "all" ON sms_log FOR ALL USING (true);
 CREATE POLICY "all" ON whatsapp_log FOR ALL USING (true);
@@ -342,8 +410,16 @@ CREATE INDEX IF NOT EXISTS idx_payments_lead ON payments(lead_id);
 CREATE INDEX IF NOT EXISTS idx_payments_reg ON payments(registration_id);
 CREATE INDEX IF NOT EXISTS idx_cohorts_status ON cohorts(status);
 CREATE INDEX IF NOT EXISTS idx_enrol_cohort ON enrolments(cohort_id);
+CREATE INDEX IF NOT EXISTS idx_enrol_lead ON enrolments(lead_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_cohort ON class_sessions(cohort_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_date ON class_sessions(session_date);
 CREATE INDEX IF NOT EXISTS idx_attend_session ON attendance(session_id);
+CREATE INDEX IF NOT EXISTS idx_attend_lead ON attendance(lead_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_lead ON school_fee_invoices(lead_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_cohort ON school_fee_invoices(cohort_id);
+CREATE INDEX IF NOT EXISTS idx_cfp_invoice ON course_fee_payments(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_cfp_status ON course_fee_payments(status);
+CREATE INDEX IF NOT EXISTS idx_docs_trigger ON documents(trigger_event);
 CREATE INDEX IF NOT EXISTS idx_sms_lead ON sms_log(lead_id);
 CREATE INDEX IF NOT EXISTS idx_wa_lead ON whatsapp_log(lead_id);
 
