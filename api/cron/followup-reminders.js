@@ -10,7 +10,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { sendSMS } from '../lib/notify.js'
+import { sendSMS } from '../_lib/notify.js'
 
 const sb = createClient(
   process.env.VITE_SUPABASE_URL,

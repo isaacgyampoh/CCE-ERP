@@ -3,7 +3,7 @@
  * Single source of truth for all outbound messages.
  *
  * Usage:
- *   import { sendSMS, sendWA, sendEmail } from '../lib/notify.js'
+ *   import { sendSMS, sendWA, sendEmail } from '../_lib/notify.js'
  *
  *   await sendSMS({ phone, message, leadId?, type? })
  *   await sendWA({ phone, message, leadId?, type? })

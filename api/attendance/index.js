@@ -6,7 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js'
-import { sendWA, sendSMS } from '../lib/notify.js'
+import { sendWA, sendSMS } from '../_lib/notify.js'
 
 const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 const APP_URL = process.env.APP_URL || 'https://cce-erp.vercel.app'
