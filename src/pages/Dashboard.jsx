@@ -1,6 +1,6 @@
 import { SOURCES } from '@/lib/constants'
 import { timeAgo, fmtDate, leadScore } from '@/lib/helpers'
-import { Avatar, Badge, StatCard, EmptyState, ProgressBar, Icon } from '@/components/ui'
+import { Avatar, Badge, KpiStrip, Kpi, EmptyState, ProgressBar, Icon } from '@/components/ui'
 
 function SmartAlerts({ leads, nav, onAutoAssign }) {
   const now = Date.now()
@@ -13,48 +13,46 @@ function SmartAlerts({ leads, nav, onAutoAssign }) {
 
   if (!hotUncontacted.length && !stale.length && !atRisk.length) return null
 
-  const AlertCard = ({ icon, title, sub, color, items }) => {
-    const styles = {
-      red:    { wrap: 'border-red-200 bg-red-50',     txt: 'text-red-800',    sub: 'text-red-600/70' },
-      amber:  { wrap: 'border-amber-200 bg-amber-50', txt: 'text-amber-800',  sub: 'text-amber-600/70' },
-      orange: { wrap: 'border-orange-200 bg-orange-50',txt: 'text-orange-800',sub: 'text-orange-600/70' },
-    }
-    const s = styles[color]
-    return (
-      <div className={`rounded-xl border p-4 ${s.wrap}`}>
-        <div className={`text-xs font-bold mb-0.5 ${s.txt}`}>{icon} {title} <span className="font-normal">({items.length})</span></div>
-        <div className={`text-[10px] mb-3 ${s.sub}`}>{sub}</div>
-        <div className="space-y-1">
-          {items.slice(0, 4).map(l => (
-            <button key={l.id} onClick={() => nav('leads', l)}
-              className="w-full flex items-center gap-2 text-left hover:bg-white/60 rounded-lg p-1.5 transition">
-              <Avatar name={l.name} size={22}/>
-              <div className="flex-1 min-w-0">
-                <div className={`text-xs font-semibold truncate ${s.txt}`}>{l.name}</div>
-                <div className={`text-[10px] ${s.sub}`}>{timeAgo(l.updated_at)}</div>
-              </div>
-            </button>
-          ))}
-          {items.length > 4 && <div className={`text-[10px] pl-1 ${s.sub}`}>+{items.length - 4} more</div>}
-        </div>
+  const AlertCard = ({ title, sub, dotColor, items }) => (
+    <div style={{ background:'var(--panel)', border:'1px solid var(--border)', borderRadius:'var(--r)', padding:14 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:3 }}>
+        <span style={{ width:7, height:7, borderRadius:'50%', background:dotColor, flexShrink:0, display:'inline-block' }}/>
+        <span style={{ fontSize:12.5, fontWeight:600, color:'var(--ink)' }}>{title}</span>
+        <span style={{ fontSize:12, color:'var(--ink-3)' }}>({items.length})</span>
       </div>
-    )
-  }
+      <div style={{ fontSize:11, color:'var(--ink-3)', marginBottom:10 }}>{sub}</div>
+      <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+        {items.slice(0, 4).map(l => (
+          <button key={l.id} onClick={() => nav('leads', l)}
+            style={{ display:'flex', alignItems:'center', gap:8, textAlign:'left', background:'none', border:'none', cursor:'pointer', padding:'4px 6px', borderRadius:4, transition:'background .1s' }}
+            onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+            onMouseLeave={e => e.currentTarget.style.background='none'}>
+            <Avatar name={l.name} size={22}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:12, fontWeight:500, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.name}</div>
+              <div style={{ fontSize:10.5, color:'var(--ink-3)' }}>{timeAgo(l.updated_at)}</div>
+            </div>
+          </button>
+        ))}
+        {items.length > 4 && <div style={{ fontSize:10.5, color:'var(--ink-3)', paddingLeft:6 }}>+{items.length - 4} more</div>}
+      </div>
+    </div>
+  )
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">{Icon.alert} Smart Alerts</h2>
+    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, fontWeight:600, color:'var(--ink)' }}>{Icon.alert} Smart Alerts</div>
         {unassigned > 0 && (
           <button onClick={onAutoAssign} className="btn btn-primary btn-sm">
-            ⚡ Auto-Assign {unassigned} leads
+            Auto-Assign {unassigned} leads
           </button>
         )}
       </div>
-      <div className="grid md:grid-cols-3 gap-3">
-        {hotUncontacted.length > 0 && <AlertCard icon="🔥" title="Hot & Uncontacted" sub="Score ≥65, still early-stage" color="red" items={hotUncontacted}/>}
-        {stale.length > 0 && <AlertCard icon="⏰" title="Stale Leads" sub="No activity in 48+ hours" color="amber" items={stale}/>}
-        {atRisk.length > 0 && <AlertCard icon="⚠️" title="At-Risk Registrations" sub="Pending reg. 72+ hours" color="orange" items={atRisk}/>}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:10 }}>
+        {hotUncontacted.length > 0 && <AlertCard title="Hot & Uncontacted" sub="Score ≥65, still early-stage" dotColor="var(--bad)" items={hotUncontacted}/>}
+        {stale.length > 0 && <AlertCard title="Stale Leads" sub="No activity in 48+ hours" dotColor="var(--warn)" items={stale}/>}
+        {atRisk.length > 0 && <AlertCard title="At-Risk Registrations" sub="Pending reg. 72+ hours" dotColor="var(--warn)" items={atRisk}/>}
       </div>
     </div>
   )
@@ -70,19 +68,9 @@ export default function Dashboard({ user, isPM, isMarketer, leads, myLeads, staf
   const registered = data.filter(l => l.status === 'registered')
   const convRate = data.length ? Math.round((registered.length / data.length) * 100) : 0
 
-  const stats = [
-    { label: 'Total Leads', value: data.length, icon: '👥', sub: `${thisMonth.length} this month` },
-    { label: 'Registered', value: registered.length, icon: '🎓', color: 'text-emerald-600', sub: `${convRate}% conversion` },
-    { label: 'Follow Up', value: data.filter(l => l.status === 'follow_up').length, icon: '📞', color: 'text-amber-600' },
-    { label: 'Pending Reg.', value: data.filter(l => l.status === 'pending_registration').length, icon: '⏳', color: 'text-orange-600' },
-    ...(isPM ? [
-      { label: 'Unassigned', value: leads.filter(l => !l.assigned_to).length, icon: '⚠️', color: 'text-red-500' },
-      { label: 'Not Qualified', value: data.filter(l => l.status === 'not_qualified').length, icon: '✗', color: 'text-red-500' },
-    ] : [
-      { label: 'My Conversion', value: `${convRate}%`, icon: '🎯', color: convRate >= 30 ? 'text-emerald-600' : 'text-amber-600' },
-      { label: 'Personal Leads', value: myLeads.filter(l => l.source === 'personal').length, icon: '💼', color: 'text-violet-600' },
-    ]),
-  ]
+  const unassignedCount = leads.filter(l => !l.assigned_to).length
+  const followUpCount   = data.filter(l => l.status === 'follow_up').length
+  const pendingCount    = data.filter(l => l.status === 'pending_registration').length
 
   const marketers = isPM ? staff.filter(s => s.role === 'marketer').map(m => ({
     ...m,
@@ -93,88 +81,110 @@ export default function Dashboard({ user, isPM, isMarketer, leads, myLeads, staf
   const sources = SOURCES.map(s => ({ label: s, value: data.filter(l => l.source === s).length })).filter(s => s.value > 0)
 
   return (
-    <div className="fade-up space-y-6">
+    <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:16 }}>
       <div>
-        <h1 className="text-xl font-bold text-slate-900">Good {new Date().getHours() < 12 ? 'morning' : 'afternoon'}, {user.name.split(' ')[0]} 👋</h1>
-        <p className="text-sm text-slate-400 mt-0.5">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)', letterSpacing:'-.01em' }}>Good {new Date().getHours() < 12 ? 'morning' : 'afternoon'}, {user.name.split(' ')[0]}</h1>
+        <p style={{ fontSize:12.5, color:'var(--ink-2)', marginTop:2 }}>{new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}</p>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {stats.map(s => <StatCard key={s.label} {...s}/>)}
-      </div>
+
+      {/* KPI strip */}
+      <KpiStrip cols={isPM ? 4 : 4}>
+        <Kpi label="Total Leads" value={data.length} delta="this month" up={`+${thisMonth.length}`}/>
+        <Kpi label="Registered" value={registered.length} delta="conversion rate" up={convRate >= 20 ? `${convRate}%` : undefined} down={convRate < 20 ? `${convRate}%` : undefined}/>
+        {isPM ? (
+          <Kpi label="Unassigned" value={unassignedCount} delta="need assignment" down={unassignedCount > 0 ? `${unassignedCount}` : undefined}/>
+        ) : (
+          <Kpi label="Follow Up" value={followUpCount}/>
+        )}
+        <Kpi label="Pending Reg." value={pendingCount}/>
+      </KpiStrip>
       {isPM && <SmartAlerts leads={leads} nav={nav} onAutoAssign={onAutoAssign}/>}
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 card overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Recent Leads</h2>
-            <button onClick={() => nav('leads')} className="text-xs text-blue-600 font-medium">View all →</button>
+
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 300px', gap:16, alignItems:'start' }}>
+        {/* Recent leads table */}
+        <div className="panel" style={{ overflow:'hidden' }}>
+          <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+            <span style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Recent Leads</span>
+            <button onClick={() => nav('leads')} style={{ fontSize:12, color:'var(--accent)', background:'none', border:'none', cursor:'pointer', fontWeight:500 }}>View all →</button>
           </div>
-          <div className="divide-y divide-slate-50">
-            {(isPM ? leads : myLeads).slice(0, 8).map(l => (
-              <div key={l.id} onClick={() => nav('leads', l)} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition">
-                <Avatar name={l.name} size={32}/>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-slate-900">{l.name}</div>
-                  <div className="text-[11px] text-slate-400">{l.phone} · {l.assignee?.name || 'Unassigned'}</div>
+          {(isPM ? leads : myLeads).length === 0
+            ? <EmptyState title="No leads yet" action={<button onClick={() => nav('add')} className="btn btn-primary btn-sm">Add Lead</button>}/>
+            : (isPM ? leads : myLeads).slice(0, 8).map(l => (
+                <div key={l.id} onClick={() => nav('leads', l)}
+                  style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', borderBottom:'1px solid var(--border)', cursor:'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.background='var(--row-hover)'}
+                  onMouseLeave={e => e.currentTarget.style.background=''}>
+                  <Avatar name={l.name} size={28}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:500, color:'var(--ink)' }}>{l.name}</div>
+                    <div style={{ fontSize:11.5, color:'var(--ink-3)' }}>{l.phone} · {l.assignee?.name || 'Unassigned'}</div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <Badge status={l.status}/>
+                    <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:2 }}>{timeAgo(l.created_at)}</div>
+                  </div>
                 </div>
-                <div className="text-right shrink-0"><Badge status={l.status}/><div className="text-[10px] text-slate-300 mt-1">{timeAgo(l.created_at)}</div></div>
-              </div>
-            ))}
-            {(isPM ? leads : myLeads).length === 0 && <EmptyState title="No leads yet" icon="📋" action={<button onClick={() => nav('add')} className="btn btn-primary btn-sm">Add Lead</button>}/>}
-          </div>
+              ))
+          }
         </div>
-        <div className="space-y-4">
+
+        {/* Right column */}
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {sources.length > 0 && (
-            <div className="card p-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Lead Sources</h2>
-              <div className="space-y-2">
+            <div className="panel" style={{ padding:14 }}>
+              <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:12 }}>Lead Sources</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {sources.map(s => (
-                  <div key={s.label} className="flex items-center gap-2">
-                    <div className="text-[11px] text-slate-500 w-16 capitalize">{s.label}</div>
+                  <div key={s.label} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:11.5, color:'var(--ink-2)', width:60, textTransform:'capitalize', flexShrink:0 }}>{s.label}</span>
                     <ProgressBar value={s.value} max={data.length}/>
-                    <div className="text-[11px] font-bold text-slate-700 w-5 text-right">{s.value}</div>
+                    <span className="mono" style={{ fontSize:11, color:'var(--ink)', width:18, textAlign:'right', flexShrink:0 }}>{s.value}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
+
           {isPM && marketers.length > 0 && (
-            <div className="card p-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Marketer Leaderboard</h2>
-              <div className="space-y-2.5">
+            <div className="panel" style={{ padding:14 }}>
+              <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:12 }}>Marketer Leaderboard</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {marketers.slice(0, 5).map((m, i) => (
-                  <div key={m.id} className="flex items-center gap-2.5">
-                    <div className="text-[10px] text-slate-300 w-3 font-bold">{i+1}</div>
-                    <Avatar name={m.name} size={26}/>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-slate-700 truncate">{m.name}</div>
-                      <div className="text-[10px] text-slate-400">{m.total} leads</div>
+                  <div key={m.id} style={{ display:'flex', alignItems:'center', gap:9 }}>
+                    <span className="mono" style={{ fontSize:10, color:'var(--ink-3)', width:12, flexShrink:0 }}>{i+1}</span>
+                    <Avatar name={m.name} size={24}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:500, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.name}</div>
+                      <div style={{ fontSize:11, color:'var(--ink-3)' }}>{m.total} leads</div>
                     </div>
-                    <div className="text-xs font-bold text-emerald-600">{m.registered} 🎓</div>
+                    <span className="mono" style={{ fontSize:12, fontWeight:500, color:'var(--ok)' }}>{m.registered}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          {isPM && leads.filter(l => !l.assigned_to).length > 0 && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
-              <div className="text-xs font-bold text-amber-800 mb-1">⚠️ Unassigned Leads</div>
-              <div className="text-xl font-bold text-amber-900">{leads.filter(l => !l.assigned_to).length}</div>
-              <div className="text-[11px] text-amber-600 mb-2">leads need assignment</div>
-              <button onClick={() => nav('leads')} className="text-[11px] font-semibold text-amber-800 underline">Assign now →</button>
+
+          {isPM && unassignedCount > 0 && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:'var(--r)', padding:14 }}>
+              <div style={{ fontSize:10.5, fontWeight:600, color:'#92400e', marginBottom:4 }}>Unassigned Leads</div>
+              <div className="mono" style={{ fontSize:22, fontWeight:500, color:'#78350f' }}>{unassignedCount}</div>
+              <div style={{ fontSize:11, color:'#b45309', margin:'3px 0 10px' }}>leads need assignment</div>
+              <button onClick={() => nav('leads')} style={{ fontSize:11.5, fontWeight:600, color:'#92400e', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>Assign now →</button>
             </div>
           )}
+
           {isMarketer && (
-            <div className="card p-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">My Pipeline</h2>
-              <div className="space-y-2">
+            <div className="panel" style={{ padding:14 }}>
+              <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:12 }}>My Pipeline</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {['assigned','contacted','follow_up','pending_registration','registered'].map(s => {
                   const count = myLeads.filter(l => l.status === s).length
                   if (!count) return null
                   return (
-                    <div key={s} className="flex items-center gap-2">
-                      <Badge status={s} className="w-28 justify-center shrink-0"/>
+                    <div key={s} style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <Badge status={s} style={{ width:110, flexShrink:0 }}/>
                       <ProgressBar value={count} max={myLeads.length}/>
-                      <span className="text-xs font-bold text-slate-700 w-4 text-right">{count}</span>
+                      <span className="mono" style={{ fontSize:11, color:'var(--ink)', width:18, textAlign:'right', flexShrink:0 }}>{count}</span>
                     </div>
                   )
                 })}

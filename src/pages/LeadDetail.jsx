@@ -55,189 +55,220 @@ export default function LeadDetail({ lead, staff, user, isPM, isMarketer, sb, on
   const regLink = lead.assigned_to ? marketerRegLink(lead.assigned_to, lead.id) : null
 
   return (
-    <div className="fade-up">
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 space-y-4">
-          {/* Header */}
-          <div className="card p-5">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Avatar name={lead.name} size={44}/>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900">{lead.name}</h2>
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                    <Badge status={lead.status}/>
-                    {lead.whatsapp_sent && <span className="badge bg-green-50 text-green-600">WA Sent</span>}
-                    {lead.scholarship_interest && <span className="badge bg-purple-50 text-purple-600">Scholarship</span>}
-                    {lead.source === 'personal' && <span className="badge bg-violet-50 text-violet-600">Personal Lead</span>}
-                    {localTags.map(t => {
-                      const tag = LEAD_TAGS.find(x => x.name === t)
-                      return tag ? <span key={t} className={`badge ${tag.color}`}>{tag.label}</span> : null
-                    })}
-                  </div>
+    <div className="fade-up" style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:16, alignItems:'start' }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        {/* Header */}
+        <div className="panel" style={{ padding:'14px 16px' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:14 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <Avatar name={lead.name} size={42}/>
+              <div>
+                <h2 style={{ fontSize:15, fontWeight:600, color:'var(--ink)' }}>{lead.name}</h2>
+                <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginTop:5 }}>
+                  <Badge status={lead.status}/>
+                  {lead.whatsapp_sent && <span className="tag">WA Sent</span>}
+                  {lead.scholarship_interest && <span className="tag">Scholarship</span>}
+                  {lead.source === 'personal' && <span className="tag">Personal</span>}
+                  {localTags.map(t => {
+                    const tag = LEAD_TAGS.find(x => x.name === t)
+                    return tag ? <span key={t} className="tag">{tag.label}</span> : null
+                  })}
                 </div>
               </div>
-              <button onClick={() => setEditMode(!editMode)} className="btn btn-ghost btn-sm">{Icon.edit} Edit</button>
             </div>
-            {editMode ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2"><Label>Full Name</Label><input value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="inp"/></div>
-                <div><Label>Phone</Label><input value={editData.phone||''} onChange={e => setEditData({...editData, phone: e.target.value})} className="inp"/></div>
-                <div><Label>Email</Label><input value={editData.email||''} onChange={e => setEditData({...editData, email: e.target.value})} className="inp"/></div>
-                <div><Label>City</Label><input value={editData.city||''} onChange={e => setEditData({...editData, city: e.target.value})} className="inp"/></div>
-                <div className="col-span-2"><Label>Notes</Label><textarea value={editData.notes||''} onChange={e => setEditData({...editData, notes: e.target.value})} className="inp" rows="2"/></div>
-                <div className="col-span-2 flex gap-2">
-                  <button onClick={saveEdit} className="btn btn-primary btn-sm">{Icon.check} Save</button>
-                  <button onClick={() => setEditMode(false)} className="btn btn-ghost btn-sm">Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3 text-sm">
-                {[
-                  { label: 'Phone', value: lead.phone },
-                  { label: 'Email', value: lead.email || '—' },
-                  { label: 'City', value: lead.city || '—' },
-                  { label: 'Source', value: lead.source },
-                  { label: 'Course', value: lead.course_interest || '—' },
-                  { label: 'Mode', value: lead.mode_preference || '—' },
-                  { label: 'Assigned To', value: lead.assignee?.name || 'Unassigned' },
-                  { label: 'Created', value: fmtDate(lead.created_at) },
-                  { label: 'Updated', value: timeAgo(lead.updated_at) },
-                ].map(f => (
-                  <div key={f.label}>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5">{f.label}</div>
-                    <div className="font-medium text-slate-700 capitalize">{f.value}</div>
-                  </div>
-                ))}
-                {lead.notes && <div className="col-span-2 md:col-span-3"><div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Notes</div><div className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3">{lead.notes}</div></div>}
-              </div>
-            )}
+            <button onClick={() => setEditMode(!editMode)} className="btn btn-ghost btn-sm">{Icon.edit} Edit</button>
           </div>
 
-          {/* Activity */}
-          <div className="card p-5">
-            <h3 className="text-sm font-bold text-slate-900 mb-4">Activity Log</h3>
-            <div className="bg-slate-50 rounded-xl p-4 mb-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="inp h-9 text-xs w-auto">
-                  {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-                {newStatus !== lead.status && <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-2 py-1 rounded">Status will change</span>}
-              </div>
-              <div className="flex gap-2">
-                <input value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()}
-                  placeholder="Add a note or update…" className="inp flex-1 text-sm"/>
-                <button onClick={addComment} disabled={!newComment.trim() || posting} className="btn btn-primary press">{posting ? '…' : 'Post'}</button>
+          {editMode ? (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              <div style={{ gridColumn:'1/-1' }}><Label>Full Name</Label><input value={editData.name} onChange={e => setEditData({...editData, name: e.target.value})} className="inp"/></div>
+              <div><Label>Phone</Label><input value={editData.phone||''} onChange={e => setEditData({...editData, phone: e.target.value})} className="inp"/></div>
+              <div><Label>Email</Label><input value={editData.email||''} onChange={e => setEditData({...editData, email: e.target.value})} className="inp"/></div>
+              <div><Label>City</Label><input value={editData.city||''} onChange={e => setEditData({...editData, city: e.target.value})} className="inp"/></div>
+              <div style={{ gridColumn:'1/-1' }}><Label>Notes</Label><textarea value={editData.notes||''} onChange={e => setEditData({...editData, notes: e.target.value})} className="inp" rows="2"/></div>
+              <div style={{ gridColumn:'1/-1', display:'flex', gap:8 }}>
+                <button onClick={saveEdit} className="btn btn-primary btn-sm">{Icon.check} Save</button>
+                <button onClick={() => setEditMode(false)} className="btn btn-ghost btn-sm">Cancel</button>
               </div>
             </div>
-            <div className="space-y-4">
-              {comments.length === 0 ? <p className="text-xs text-slate-300 text-center py-6">No activity yet.</p> :
-                comments.map(c => (
-                  <div key={c.id} className="flex gap-3">
-                    <Avatar name={c.staff_name} size={28}/>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-slate-800">{c.staff_name}</span>
-                        {c.status_change && <Badge status={c.status_change}/>}
-                        <span className="text-[10px] text-slate-300 ml-auto">{timeAgo(c.created_at)}</span>
-                      </div>
-                      <div className="text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">{c.comment}</div>
+          ) : (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'10px 16px' }}>
+              {[
+                { label: 'Phone',       value: lead.phone },
+                { label: 'Email',       value: lead.email || '—' },
+                { label: 'City',        value: lead.city || '—' },
+                { label: 'Source',      value: lead.source },
+                { label: 'Course',      value: lead.course_interest || '—' },
+                { label: 'Mode',        value: lead.mode_preference || '—' },
+                { label: 'Assigned To', value: lead.assignee?.name || 'Unassigned' },
+                { label: 'Created',     value: fmtDate(lead.created_at) },
+                { label: 'Updated',     value: timeAgo(lead.updated_at) },
+              ].map(f => (
+                <div key={f.label}>
+                  <div style={{ fontSize:10, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:2 }}>{f.label}</div>
+                  <div style={{ fontSize:12.5, fontWeight:500, color:'var(--ink)', textTransform:'capitalize' }}>{f.value}</div>
+                </div>
+              ))}
+              {lead.notes && (
+                <div style={{ gridColumn:'1/-1' }}>
+                  <div style={{ fontSize:10, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:4 }}>Notes</div>
+                  <div style={{ fontSize:12.5, color:'var(--ink-2)', background:'var(--bg)', borderRadius:'var(--r)', padding:'8px 10px' }}>{lead.notes}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Activity */}
+        <div className="panel" style={{ padding:'14px 16px' }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)', marginBottom:12 }}>Activity Log</div>
+          <div style={{ background:'var(--bg)', borderRadius:'var(--r)', padding:12, marginBottom:14, display:'flex', flexDirection:'column', gap:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="inp" style={{ width:'auto' }}>
+                {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              {newStatus !== lead.status && (
+                <span style={{ fontSize:10.5, fontWeight:600, color:'var(--warn)', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:4, padding:'2px 7px' }}>Status will change</span>
+              )}
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <input value={newComment} onChange={e => setNewComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && addComment()}
+                placeholder="Add a note or update…" className="inp" style={{ flex:1 }}/>
+              <button onClick={addComment} disabled={!newComment.trim() || posting} className="btn btn-primary press">{posting ? '…' : 'Post'}</button>
+            </div>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            {comments.length === 0
+              ? <p style={{ fontSize:12, color:'var(--ink-3)', textAlign:'center', padding:'24px 0' }}>No activity yet.</p>
+              : comments.map(c => (
+                <div key={c.id} style={{ display:'flex', gap:10 }}>
+                  <Avatar name={c.staff_name} size={28}/>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                      <span style={{ fontSize:12, fontWeight:600, color:'var(--ink)' }}>{c.staff_name}</span>
+                      {c.status_change && <Badge status={c.status_change}/>}
+                      <span style={{ fontSize:10.5, color:'var(--ink-3)', marginLeft:'auto' }}>{timeAgo(c.created_at)}</span>
                     </div>
+                    <div style={{ fontSize:12.5, color:'var(--ink-2)', background:'var(--bg)', borderRadius:'var(--r)', padding:'7px 10px' }}>{c.comment}</div>
                   </div>
-                ))}
-            </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Sidebar */}
+      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        {/* Quick actions */}
+        <div className="panel" style={{ padding:14 }}>
+          <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:10 }}>Quick Actions</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+            {lead.phone && <>
+              <a href={`tel:${lead.phone}`} className="press"
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 8px', borderRadius:'var(--r)', textDecoration:'none', color:'var(--ink)', fontSize:12.5, fontWeight:500, transition:'background .12s' }}
+                onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+                onMouseLeave={e => e.currentTarget.style.background=''}>
+                <span style={{ width:28, height:28, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--r)', display:'grid', placeItems:'center', color:'var(--ink-2)', flexShrink:0 }}>{Icon.phone}</span>
+                Call {lead.phone}
+              </a>
+              <a href={`https://wa.me/${phone}?text=${encodeURIComponent(WA_ASSIGN_MSG(lead.name, lead.assignee?.name || 'CCE'))}`} target="_blank" rel="noopener" className="press"
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 8px', borderRadius:'var(--r)', textDecoration:'none', color:'var(--ink)', fontSize:12.5, fontWeight:500, transition:'background .12s' }}
+                onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+                onMouseLeave={e => e.currentTarget.style.background=''}>
+                <span style={{ width:28, height:28, background:'var(--accent-wash)', border:'1px solid var(--border)', borderRadius:'var(--r)', display:'grid', placeItems:'center', color:'var(--accent)', flexShrink:0 }}>{Icon.wa}</span>
+                WhatsApp
+              </a>
+            </>}
+            {lead.email && (
+              <a href={`mailto:${lead.email}`} className="press"
+                style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 8px', borderRadius:'var(--r)', textDecoration:'none', color:'var(--ink)', fontSize:12.5, fontWeight:500, transition:'background .12s' }}
+                onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+                onMouseLeave={e => e.currentTarget.style.background=''}>
+                <span style={{ width:28, height:28, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--r)', display:'grid', placeItems:'center', color:'var(--ink-2)', flexShrink:0 }}>{Icon.mail}</span>
+                Email
+              </a>
+            )}
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          {/* Quick actions */}
-          <div className="card p-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quick Actions</h3>
-            <div className="space-y-1.5">
-              {lead.phone && <>
-                <a href={`tel:${lead.phone}`} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
-                  <span className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">{Icon.phone}</span>Call {lead.phone}
-                </a>
-                <a href={`https://wa.me/${phone}?text=${encodeURIComponent(WA_ASSIGN_MSG(lead.name, lead.assignee?.name || 'CCE'))}`} target="_blank" rel="noopener"
-                  className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
-                  <span className="w-7 h-7 bg-green-50 rounded-lg flex items-center justify-center text-green-600">{Icon.wa}</span>WhatsApp
-                </a>
-              </>}
-              {lead.email && <a href={`mailto:${lead.email}`} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-slate-50 transition text-sm text-slate-700 font-medium press">
-                <span className="w-7 h-7 bg-violet-50 rounded-lg flex items-center justify-center text-violet-600">{Icon.mail}</span>Email
-              </a>}
-            </div>
-          </div>
-
-          {/* Registration link */}
-          {(isPM || isMarketer) && lead.assigned_to && lead.status !== 'registered' && (
-            <div className="card p-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Registration Link</h3>
-              <p className="text-[10px] text-slate-400 mb-3">Send this unique link to the lead to complete registration & payment.</p>
-              {regLink && (
-                <div className="bg-slate-50 rounded-lg p-2 mb-3">
-                  <div className="text-[10px] font-mono text-slate-500 truncate">{regLink}</div>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button onClick={() => onRegLink(lead)} className="btn btn-primary flex-1 btn-sm">
-                  {Icon.wa} Send via WA
-                </button>
-                <button onClick={copyRegLink} className="btn btn-ghost btn-sm">
-                  {copied ? Icon.check : Icon.copy}
-                </button>
+        {/* Registration link */}
+        {(isPM || isMarketer) && lead.assigned_to && lead.status !== 'registered' && (
+          <div className="panel" style={{ padding:14 }}>
+            <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:4 }}>Registration Link</div>
+            <p style={{ fontSize:11, color:'var(--ink-3)', marginBottom:10 }}>Send this unique link to complete registration &amp; payment.</p>
+            {regLink && (
+              <div style={{ background:'var(--bg)', borderRadius:'var(--r)', padding:'7px 8px', marginBottom:10 }}>
+                <div style={{ fontSize:10.5, fontFamily:'IBM Plex Mono,monospace', color:'var(--ink-3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{regLink}</div>
               </div>
-            </div>
-          )}
-
-          {/* Registered info */}
-          {lead.status === 'registered' && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-              <div className="text-xs font-bold text-emerald-800 mb-2">🎓 Registered & Paid</div>
-              {lead.reg_fee_paid && <div className="text-lg font-bold text-emerald-700">{fmtCurrency(lead.reg_fee_paid)}</div>}
-              <div className="text-[11px] text-emerald-600">{fmtDate(lead.reg_paid_at)}</div>
-            </div>
-          )}
-
-          {/* Tags */}
-          <div className="card p-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Tags</h3>
-            <div className="flex flex-wrap gap-1.5">
-              {LEAD_TAGS.map(tag => (
-                <button
-                  key={tag.name}
-                  onClick={() => toggleTag(tag.name)}
-                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition
-                    ${localTags.includes(tag.name) ? `${tag.color} border-transparent` : 'border-slate-200 text-slate-400 hover:border-slate-300'}`}
-                >
-                  {tag.label}
-                </button>
-              ))}
+            )}
+            <div style={{ display:'flex', gap:6 }}>
+              <button onClick={() => onRegLink(lead)} className="btn btn-primary btn-sm press" style={{ flex:1 }}>
+                {Icon.wa} Send via WA
+              </button>
+              <button onClick={copyRegLink} className="btn btn-ghost btn-sm press">
+                {copied ? Icon.check : Icon.copy}
+              </button>
             </div>
           </div>
+        )}
 
-          {/* Assign (PM only) */}
-          {isPM && (
-            <div className="card p-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Assign to Marketer</h3>
-              <p className="text-[10px] text-slate-400 mb-3">Auto-sends WhatsApp intro to the lead on assignment.</p>
-              {marketers.length === 0 ? <p className="text-xs text-slate-300 text-center py-4">No marketers added yet.</p> : (
-                <div className="space-y-1.5">
+        {/* Registered info */}
+        {lead.status === 'registered' && (
+          <div style={{ background:'var(--accent-wash)', border:'1px solid var(--border)', borderRadius:'var(--r)', padding:14 }}>
+            <div style={{ fontSize:10.5, fontWeight:600, color:'var(--accent-ink)', marginBottom:6 }}>Registered &amp; Paid</div>
+            {lead.reg_fee_paid && <div className="mono" style={{ fontSize:20, fontWeight:500, color:'var(--ok)' }}>{fmtCurrency(lead.reg_fee_paid)}</div>}
+            <div style={{ fontSize:11, color:'var(--ink-2)', marginTop:2 }}>{fmtDate(lead.reg_paid_at)}</div>
+          </div>
+        )}
+
+        {/* Tags */}
+        <div className="panel" style={{ padding:14 }}>
+          <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:10 }}>Tags</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            {LEAD_TAGS.map(tag => (
+              <button key={tag.name} onClick={() => toggleTag(tag.name)}
+                style={{
+                  fontSize:11, padding:'2px 8px', borderRadius:4, cursor:'pointer', fontFamily:'IBM Plex Mono,monospace', transition:'all .12s',
+                  border: localTags.includes(tag.name) ? '1px solid var(--accent)' : '1px solid var(--border-strong)',
+                  background: localTags.includes(tag.name) ? 'var(--accent-wash)' : 'var(--panel)',
+                  color: localTags.includes(tag.name) ? 'var(--accent-ink)' : 'var(--ink-3)',
+                  fontWeight: localTags.includes(tag.name) ? 600 : 400,
+                }}>
+                {tag.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Assign (PM only) */}
+        {isPM && (
+          <div className="panel" style={{ padding:14 }}>
+            <div style={{ fontSize:10.5, fontWeight:600, letterSpacing:'.05em', textTransform:'uppercase', color:'var(--ink-3)', marginBottom:3 }}>Assign to Marketer</div>
+            <p style={{ fontSize:11, color:'var(--ink-3)', marginBottom:10 }}>Auto-sends WhatsApp intro on assignment.</p>
+            {marketers.length === 0
+              ? <p style={{ fontSize:12, color:'var(--ink-3)', textAlign:'center', padding:'16px 0' }}>No marketers added yet.</p>
+              : (
+                <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                   {marketers.map(m => (
                     <button key={m.id} onClick={() => handleAssign(m.id)} disabled={assigning === m.id}
-                      className={`w-full flex items-center gap-2.5 p-2.5 rounded-lg text-left transition press ${lead.assigned_to === m.id ? 'bg-blue-50 border border-blue-200' : 'hover:bg-slate-50 border border-transparent'}`}>
-                      <Avatar name={m.name} size={28}/>
-                      <span className="flex-1 text-sm font-medium text-slate-700">{m.name}</span>
-                      {assigning === m.id && <div className="w-3 h-3 border border-slate-300 border-t-blue-600 rounded-full animate-spin"/>}
-                      {lead.assigned_to === m.id && <span className="text-[10px] text-blue-600 font-bold">Current</span>}
+                      style={{
+                        display:'flex', alignItems:'center', gap:10, padding:'7px 8px', borderRadius:'var(--r)',
+                        border: lead.assigned_to === m.id ? '1px solid var(--accent)' : '1px solid transparent',
+                        background: lead.assigned_to === m.id ? 'var(--accent-wash)' : 'transparent',
+                        cursor:'pointer', textAlign:'left', transition:'background .12s',
+                      }}
+                      onMouseEnter={e => { if (lead.assigned_to !== m.id) e.currentTarget.style.background='var(--bg)' }}
+                      onMouseLeave={e => { if (lead.assigned_to !== m.id) e.currentTarget.style.background='transparent' }}>
+                      <Avatar name={m.name} size={26}/>
+                      <span style={{ flex:1, fontSize:12.5, fontWeight:500, color:'var(--ink)' }}>{m.name}</span>
+                      {assigning === m.id && <div style={{ width:12, height:12, border:'1.5px solid var(--border)', borderTopColor:'var(--accent)', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>}
+                      {lead.assigned_to === m.id && <span style={{ fontSize:10, fontWeight:600, color:'var(--accent)' }}>Current</span>}
                     </button>
                   ))}
                 </div>
               )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )

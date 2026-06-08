@@ -282,40 +282,47 @@ function ERP() {
 
   // ── Login ──────────────────────────────────────────────────────────────
   if (!user) return (
-    <div className="min-h-screen flex bg-slate-50">
-      <div className="hidden md:flex flex-col justify-center w-96 bg-gradient-to-b from-blue-700 to-indigo-900 p-10 text-white flex-shrink-0">
-        <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center text-2xl font-black mb-6">C</div>
-        <h1 className="text-3xl font-black leading-tight">Cambridge Center<br/>of Excellence</h1>
-        <p className="text-blue-200 text-sm mt-3 leading-relaxed">Integrated CRM, Lead Pipeline, Payments & Admissions Management.</p>
-        <div className="mt-8 space-y-2.5 text-sm text-blue-200">
-          {['Role-based dashboards','Lead assignment & tracking','Unique marketer registration links','Paystack payment integration','Conversion rate analytics','Finance & Admission portals'].map(f => (
-            <div key={f} className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-white/20 rounded-full flex items-center justify-center text-[9px]">✓</div>{f}
+    <div style={{ minHeight:'100vh', display:'flex', background:'var(--bg)' }}>
+      {/* Left panel */}
+      <div style={{ width:280, background:'var(--accent)', padding:'40px 32px', display:'flex', flexDirection:'column', justifyContent:'center', flexShrink:0 }} className="hidden md:flex">
+        <div style={{ width:32, height:32, background:'rgba(255,255,255,.15)', borderRadius:6, display:'grid', placeItems:'center', color:'#fff', fontWeight:600, fontSize:13, marginBottom:24 }}>CC</div>
+        <h1 style={{ color:'#fff', fontSize:20, fontWeight:600, lineHeight:1.3, letterSpacing:'-.01em' }}>Cambridge Center<br/>of Excellence</h1>
+        <p style={{ color:'rgba(255,255,255,.65)', fontSize:12.5, marginTop:10, lineHeight:1.6 }}>Integrated CRM, Lead Pipeline, Payments &amp; Admissions.</p>
+        <div style={{ marginTop:28, display:'flex', flexDirection:'column', gap:8 }}>
+          {['Role-based dashboards','Lead assignment & tracking','Marketer registration links','Paystack payment integration','Finance & Admissions portals'].map(f => (
+            <div key={f} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:'rgba(255,255,255,.7)' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>{f}
             </div>
           ))}
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-sm fade-up">
-          <div className="mb-8 md:hidden">
-            <div className="w-10 h-10 bg-blue-700 rounded-xl flex items-center justify-center text-xl font-black text-white mb-3">C</div>
-            <h1 className="text-2xl font-black text-slate-900">CCE ERP</h1>
+      {/* Right — account picker */}
+      <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+        <div className="fade-up" style={{ width:'100%', maxWidth:360 }}>
+          <div style={{ marginBottom:8, display:'flex', alignItems:'center', gap:8 }} className="md:hidden">
+            <div style={{ width:28, height:28, background:'var(--accent)', borderRadius:5, display:'grid', placeItems:'center', color:'#fff', fontWeight:600, fontSize:11 }}>CC</div>
+            <span style={{ fontWeight:600, fontSize:14, color:'var(--ink)' }}>CCE ERP</span>
           </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-1">Welcome back</h2>
-          <p className="text-slate-400 text-sm mb-6">Select your account to continue</p>
-          {loading ? <Spinner size={24}/> : staff.length === 0 ? (
-            <div className="card p-6 text-center"><p className="text-sm text-slate-400">No staff found. Run the SQL schema first.</p></div>
+          <h2 style={{ fontSize:16, fontWeight:600, color:'var(--ink)', marginBottom:3 }}>Welcome back</h2>
+          <p style={{ color:'var(--ink-3)', fontSize:12.5, marginBottom:20 }}>Select your account to continue</p>
+          {loading ? <Spinner size={20}/> : staff.length === 0 ? (
+            <div className="panel" style={{ padding:16, textAlign:'center' }}>
+              <p style={{ fontSize:12.5, color:'var(--ink-2)' }}>No staff found. Run the SQL schema first.</p>
+            </div>
           ) : (
-            <div className="space-y-2">
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {staff.map(s => (
-                <button key={s.id} onClick={() => login(s)}
-                  className="w-full flex items-center gap-3 p-3.5 card hover:border-blue-300 hover:shadow-sm transition press text-left group">
-                  <Avatar name={s.name} size={38}/>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-900">{s.name}</div>
-                    <div className="text-[10px] text-slate-400 uppercase tracking-wider">{s.role}</div>
+                <button key={s.id} onClick={() => login(s)} className="panel press"
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'10px 14px', cursor:'pointer', border:'1px solid var(--border)', borderRadius:'var(--r)', background:'var(--panel)', transition:'border-color .12s', textAlign:'left' }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor='var(--accent)'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}
+                >
+                  <Avatar name={s.name} size={34}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:500, color:'var(--ink)' }}>{s.name}</div>
+                    <div style={{ fontSize:10.5, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.04em', marginTop:1 }}>{s.role}</div>
                   </div>
-                  <svg className="opacity-0 group-hover:opacity-100 transition text-blue-600" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color:'var(--ink-3)' }}><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               ))}
             </div>
@@ -350,85 +357,104 @@ function ERP() {
 
   // ── Layout ──────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex">
-      {sidebarOpen && <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={() => setSidebarOpen(false)}/>}
+    <div style={{ minHeight:'100vh', display:'flex' }}>
+      {sidebarOpen && <div className="fixed inset-0 z-40 md:hidden" style={{ background:'rgba(20,20,22,.28)' }} onClick={() => setSidebarOpen(false)}/>}
 
       {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-full w-[220px] bg-white border-r border-slate-200 flex flex-col z-50 transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
-        <div className="h-14 flex items-center px-4 border-b border-slate-100">
-          <div className="w-7 h-7 bg-blue-700 rounded-lg flex items-center justify-center text-white text-xs font-black mr-2.5">C</div>
-          <div><div className="text-xs font-bold text-slate-900">CCE ERP</div><div className="text-[9px] text-slate-400">Cambridge Centre</div></div>
+      <aside style={{ position:'fixed', top:0, left:0, height:'100vh', width:208, background:'var(--panel)', borderRight:'1px solid var(--border)', display:'flex', flexDirection:'column', zIndex:50, transition:'transform .2s', transform: sidebarOpen ? 'translateX(0)' : undefined }} className={sidebarOpen ? '' : '-translate-x-full md:translate-x-0'}>
+        {/* Brand */}
+        <div style={{ height:48, display:'flex', alignItems:'center', padding:'0 14px', borderBottom:'1px solid var(--border)', gap:9, flexShrink:0 }}>
+          <div style={{ width:26, height:26, background:'var(--accent)', borderRadius:5, display:'grid', placeItems:'center', color:'#fff', fontWeight:600, fontSize:11, flexShrink:0 }}>CC</div>
+          <div>
+            <div style={{ fontSize:12.5, fontWeight:600, color:'var(--ink)', letterSpacing:'-.01em' }}>CCE ERP</div>
+            <div style={{ fontSize:10, color:'var(--ink-3)', marginTop:1 }}>Cambridge Centre</div>
+          </div>
         </div>
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        {/* Nav */}
+        <nav style={{ flex:1, padding:8, overflowY:'auto', display:'flex', flexDirection:'column', gap:1 }}>
           {navItems.map(item => (
             <button key={item.id} onClick={() => nav(item.id)}
-              className={`nav-item w-full ${page === item.id && !selectedLead ? 'active' : ''}`}>
+              className={`nav-item w-full ${page === item.id && !selectedLead ? 'active' : ''}`}
+              style={{ border:'none', background:'none', textAlign:'left' }}>
               {item.icon}
-              <span className="flex-1 text-left">{item.label}</span>
-              {item.count != null && <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{item.count}</span>}
+              <span style={{ flex:1 }}>{item.label}</span>
+              {item.count != null && <span style={{ fontSize:10.5, color:'var(--ink-3)', fontFamily:'IBM Plex Mono,monospace' }}>{item.count}</span>}
             </button>
           ))}
         </nav>
-        <div className="p-3 border-t border-slate-100">
-          <div className="flex items-center gap-2.5 p-2 rounded-lg">
-            <Avatar name={user.name} size={30}/>
-            <div className="flex-1 min-w-0"><div className="text-xs font-semibold text-slate-900 truncate">{user.name}</div><div className="text-[10px] text-slate-400 uppercase">{user.role}</div></div>
-            <button onClick={logout} title="Logout" className="text-slate-300 hover:text-red-500 transition p-1 press">{Icon.logout}</button>
+        {/* User footer */}
+        <div style={{ padding:'10px 12px', borderTop:'1px solid var(--border)', display:'flex', alignItems:'center', gap:9 }}>
+          <Avatar name={user.name} size={26}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:12, fontWeight:500, color:'var(--ink)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user.name}</div>
+            <div style={{ fontSize:10, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'.04em' }}>{user.role}</div>
           </div>
+          <button onClick={logout} title="Logout" className="press" style={{ color:'var(--ink-3)', background:'none', border:'none', cursor:'pointer', lineHeight:1, padding:4 }}
+            onMouseEnter={e => e.currentTarget.style.color='var(--bad)'}
+            onMouseLeave={e => e.currentTarget.style.color='var(--ink-3)'}
+          >{Icon.logout}</button>
         </div>
       </aside>
 
       {/* Main */}
-      <div className="flex-1 md:ml-[220px] flex flex-col min-h-screen">
+      <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:'100vh' }} className="md:ml-[208px]" id="main-col">
         {/* Topbar */}
-        <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-3 sticky top-0 z-30">
-          <button className="md:hidden p-2 -ml-1" onClick={() => setSidebarOpen(true)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <header style={{ height:48, background:'var(--panel)', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', padding:'0 16px', gap:12, position:'sticky', top:0, zIndex:30, flexShrink:0 }}>
+          <button className="md:hidden press" onClick={() => setSidebarOpen(true)} style={{ color:'var(--ink-2)', background:'none', border:'none', cursor:'pointer', lineHeight:1 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <div className="flex-1 text-sm font-semibold text-slate-800">
+          {/* Breadcrumb */}
+          <div style={{ display:'flex', alignItems:'center', gap:7, fontSize:12.5, color:'var(--ink-3)' }}>
+            <span>CCE</span>
+            <span style={{ color:'var(--border-strong)' }}>/</span>
             {selectedLead ? (
-              <span className="flex items-center gap-1.5">
-                <button onClick={() => setSelectedLead(null)} className="text-slate-400 hover:text-slate-700 transition">{Icon.back}</button>
-                <span className="text-slate-300">/</span>
-                <span className="truncate">{selectedLead.name}</span>
-              </span>
-            ) : navItems.find(n => n.id === page)?.label || 'Dashboard'}
+              <>
+                <button onClick={() => setSelectedLead(null)} style={{ color:'var(--ink-2)', background:'none', border:'none', cursor:'pointer', fontSize:12.5 }}>{navItems.find(n => n.id === page)?.label}</button>
+                <span style={{ color:'var(--border-strong)' }}>/</span>
+                <span style={{ color:'var(--ink)', fontWeight:600 }} className="truncate">{selectedLead.name}</span>
+              </>
+            ) : (
+              <b style={{ color:'var(--ink)', fontWeight:600 }}>{navItems.find(n => n.id === page)?.label || 'Dashboard'}</b>
+            )}
           </div>
-          <button
-            onClick={() => setShowPalette(true)}
-            className="hidden md:flex items-center gap-2 h-8 px-3 bg-slate-100 hover:bg-slate-200 transition rounded-lg text-xs text-slate-400"
-          >
-            {Icon.dashboard && null}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span>Search…</span>
-            <kbd className="text-[9px] bg-white border border-slate-200 rounded px-1 font-mono ml-1">⌘K</kbd>
+          {/* Search */}
+          <button onClick={() => setShowPalette(true)}
+            className="hidden md:flex"
+            style={{ marginLeft:8, flex:1, maxWidth:300, height:30, border:'1px solid var(--border)', borderRadius:'var(--r)', padding:'0 10px 0 28px', fontSize:12.5, color:'var(--ink-3)', background:'var(--bg)', cursor:'text', alignItems:'center', position:'relative', gap:6 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span style={{ flex:1 }}>Search…</span>
+            <kbd style={{ fontSize:9, background:'var(--panel)', border:'1px solid var(--border)', borderRadius:3, padding:'1px 4px', fontFamily:'IBM Plex Mono,monospace' }}>⌘K</kbd>
           </button>
-          <div className="relative">
-            <button onClick={() => setShowNotifs(!showNotifs)}
-              className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-100 transition text-slate-500">
+          <div style={{ flex:1 }} className="hidden md:block"/>
+          {/* Notifications */}
+          <div style={{ position:'relative' }}>
+            <button onClick={() => setShowNotifs(!showNotifs)} className="press"
+              style={{ width:30, height:30, border:'1px solid var(--border)', borderRadius:'var(--r)', background:'var(--panel)', display:'grid', placeItems:'center', cursor:'pointer', color:'var(--ink-2)', position:'relative' }}>
               {Icon.bell}
-              {unread > 0 && <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unread}</span>}
+              {unread > 0 && <span style={{ position:'absolute', top:3, right:3, width:7, height:7, background:'var(--bad)', borderRadius:'50%' }}/>}
             </button>
             {showNotifs && (
-              <div className="absolute right-0 top-11 w-80 card shadow-xl z-50 fade-up overflow-hidden">
-                <div className="p-3 border-b border-slate-100 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900">Notifications {unread > 0 && <span className="text-blue-600">({unread})</span>}</span>
-                  <div className="flex gap-2">
-                    {unread > 0 && <button onClick={markAllRead} className="text-[10px] text-blue-600 font-medium">Mark all read</button>}
-                    <button onClick={() => setShowNotifs(false)} className="text-slate-300 hover:text-slate-600">{Icon.x}</button>
+              <div className="panel fade-up" style={{ position:'absolute', right:0, top:38, width:300, zIndex:50, overflow:'hidden', boxShadow:'0 8px 24px rgba(0,0,0,.1)' }}>
+                <div style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                  <span style={{ fontSize:12.5, fontWeight:600, color:'var(--ink)' }}>Notifications {unread > 0 && <span style={{ color:'var(--accent)' }}>({unread})</span>}</span>
+                  <div style={{ display:'flex', gap:8 }}>
+                    {unread > 0 && <button onClick={markAllRead} style={{ fontSize:11, color:'var(--accent)', background:'none', border:'none', cursor:'pointer' }}>Mark all read</button>}
+                    <button onClick={() => setShowNotifs(false)} style={{ color:'var(--ink-3)', background:'none', border:'none', cursor:'pointer', lineHeight:1 }}>{Icon.x}</button>
                   </div>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? <div className="py-8 text-center text-xs text-slate-300">No notifications</div> :
-                    notifications.map(n => (
-                      <div key={n.id} onClick={() => { markNotifRead(n.id); setShowNotifs(false); if (n.lead_id) { const l = leads.find(x => x.id === n.lead_id); if (l) nav('leads', l) } }}
-                        className={`p-3 border-b border-slate-50 cursor-pointer hover:bg-slate-50 transition ${!n.is_read ? 'bg-blue-50/40' : ''}`}>
-                        <div className="flex items-start gap-2">
-                          {!n.is_read && <div className="live-dot mt-1.5 shrink-0"/>}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-semibold text-slate-800">{n.title}</div>
-                            <div className="text-[11px] text-slate-500 mt-0.5">{n.message}</div>
-                            <div className="text-[10px] text-slate-300 mt-1">{timeAgo(n.created_at)}</div>
+                <div style={{ maxHeight:320, overflowY:'auto' }}>
+                  {notifications.length === 0
+                    ? <div style={{ padding:'28px 14px', textAlign:'center', fontSize:12, color:'var(--ink-3)' }}>No notifications</div>
+                    : notifications.map(n => (
+                      <div key={n.id}
+                        onClick={() => { markNotifRead(n.id); setShowNotifs(false); if (n.lead_id) { const l = leads.find(x => x.id === n.lead_id); if (l) nav('leads', l) } }}
+                        style={{ padding:'9px 14px', borderBottom:'1px solid var(--border)', cursor:'pointer', background: !n.is_read ? 'var(--accent-wash)' : undefined }}>
+                        <div style={{ display:'flex', gap:8 }}>
+                          {!n.is_read && <div className="live-dot" style={{ marginTop:4, flexShrink:0 }}/>}
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12.5, fontWeight:500, color:'var(--ink)' }}>{n.title}</div>
+                            <div style={{ fontSize:11.5, color:'var(--ink-2)', marginTop:2 }}>{n.message}</div>
+                            <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:3 }}>{timeAgo(n.created_at)}</div>
                           </div>
                         </div>
                       </div>
@@ -440,7 +466,7 @@ function ERP() {
         </header>
 
         {/* Page */}
-        <main className="flex-1 p-4 md:p-6">
+        <main style={{ flex:1, padding:18 }}>
           {loading ? <Spinner size={24}/> : (
             <>
               {page === 'dashboard'    && <Dashboard user={user} isPM={isPM} isMarketer={isMarketer} leads={leads} myLeads={myLeads} staff={staff} nav={nav} onAutoAssign={autoAssign}/>}
@@ -481,55 +507,41 @@ function ERP() {
 
       {/* Auto-assign WhatsApp batch modal */}
       {autoAssignWA && (
-        <div className="fixed inset-0 z-[150] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
-            <div className="p-5 border-b border-slate-100">
-              <h2 className="font-bold text-slate-900">Send WhatsApp Messages</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {autoAssignWA.length} lead{autoAssignWA.length > 1 ? 's' : ''} assigned · SMS sent automatically · Click each to open WhatsApp
-              </p>
+        <div style={{ position:'fixed', inset:0, zIndex:150, background:'rgba(20,20,22,.28)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div className="panel" style={{ width:'100%', maxWidth:420, maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 8px 32px rgba(0,0,0,.12)' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)' }}>
+              <div style={{ fontWeight:600, fontSize:13, color:'var(--ink)' }}>Send WhatsApp Messages</div>
+              <div style={{ fontSize:11.5, color:'var(--ink-3)', marginTop:2 }}>{autoAssignWA.length} lead{autoAssignWA.length > 1 ? 's' : ''} assigned · SMS sent automatically</div>
             </div>
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
-              {autoAssignWA.map(({ lead, marketer, phone, waMsg }, i) => (
-                <div key={lead.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-900">{lead.name}</div>
-                    <div className="text-xs text-slate-400">{lead.phone} {lead.course_interest ? `· ${lead.course_interest}` : ''}</div>
-                    <div className="text-[11px] text-violet-600 mt-0.5">→ {marketer.name}</div>
+            <div style={{ flex:1, overflowY:'auto' }}>
+              {autoAssignWA.map(({ lead, marketer, phone, waMsg }) => (
+                <div key={lead.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 16px', borderBottom:'1px solid var(--border)' }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:500, color:'var(--ink)' }}>{lead.name}</div>
+                    <div style={{ fontSize:11.5, color:'var(--ink-3)' }}>{lead.phone}{lead.course_interest ? ` · ${lead.course_interest}` : ''}</div>
+                    <div style={{ fontSize:11, color:'var(--accent)', marginTop:1 }}>→ {marketer.name}</div>
                   </div>
-                  <a
-                    href={`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`}
-                    target="_blank" rel="noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition press">
-                    💬 WhatsApp
-                  </a>
+                  <a href={`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`} target="_blank" rel="noreferrer"
+                    className="btn btn-primary btn-sm press">WA</a>
                 </div>
               ))}
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-2">
-              <button onClick={() => {
-                autoAssignWA.forEach(({ phone, waMsg }) =>
-                  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`, '_blank')
-                )
-              }} className="flex-1 btn text-xs h-9 bg-emerald-600 text-white hover:bg-emerald-700 border-0 press font-semibold">
-                Open All ({autoAssignWA.length})
-              </button>
+            <div style={{ padding:'10px 14px', borderTop:'1px solid var(--border)', display:'flex', gap:8 }}>
+              <button onClick={() => autoAssignWA.forEach(({ phone, waMsg }) => window.open(`https://wa.me/${phone}?text=${encodeURIComponent(waMsg)}`, '_blank'))}
+                className="btn btn-primary press" style={{ flex:1 }}>Open All ({autoAssignWA.length})</button>
               <button onClick={() => { setAutoAssignWA(null); showToast(`${autoAssignWA.length} leads auto-assigned`, 'info') }}
-                className="flex-1 btn text-xs h-9 bg-slate-100 text-slate-700 border-0 press">
-                Done
-              </button>
+                className="btn press" style={{ flex:1 }}>Done</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Realtime toast */}
+      {/* Toast */}
       {toast && (
-        <div className={`fixed bottom-4 right-4 z-[200] max-w-xs px-4 py-3 rounded-xl shadow-lg text-sm font-medium text-white flex items-start gap-2 fade-up
-          ${toast.type === 'new_lead' ? 'bg-blue-600' : 'bg-slate-800'}`}>
-          <div className="live-dot mt-1.5 shrink-0"/>
-          <div className="flex-1 min-w-0 leading-snug">{toast.msg}</div>
-          <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100 ml-1 shrink-0">✕</button>
+        <div className="fade-up" style={{ position:'fixed', bottom:16, right:16, zIndex:200, maxWidth:300, padding:'10px 14px', borderRadius:'var(--r)', boxShadow:'0 4px 16px rgba(0,0,0,.14)', fontSize:12.5, fontWeight:500, color:'#fff', display:'flex', alignItems:'flex-start', gap:9, background: toast.type === 'new_lead' ? 'var(--accent)' : 'var(--ink)' }}>
+          <div className="live-dot" style={{ marginTop:4, flexShrink:0 }}/>
+          <div style={{ flex:1, lineHeight:1.5 }}>{toast.msg}</div>
+          <button onClick={() => setToast(null)} style={{ color:'rgba(255,255,255,.6)', background:'none', border:'none', cursor:'pointer', fontSize:13, lineHeight:1 }}>✕</button>
         </div>
       )}
     </div>
@@ -559,55 +571,57 @@ function LeadList({ leads, isPM, staff, onSelect }) {
   })
 
   return (
-    <div className="fade-up space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-48">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, course…" className="inp pl-9 h-9 text-xs"/>
+    <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+        <div style={{ position:'relative', flex:1, minWidth:192 }}>
+          <svg style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'var(--ink-3)' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, phone, course…" className="inp" style={{ paddingLeft:28 }}/>
         </div>
-        <select value={statusF} onChange={e => setStatusF(e.target.value)} className="inp h-9 text-xs w-auto">
+        <select value={statusF} onChange={e => setStatusF(e.target.value)} className="inp" style={{ width:'auto' }}>
           <option value="all">All Statuses</option>
           {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
-        <select value={sourceF} onChange={e => setSourceF(e.target.value)} className="inp h-9 text-xs w-auto">
+        <select value={sourceF} onChange={e => setSourceF(e.target.value)} className="inp" style={{ width:'auto' }}>
           <option value="all">All Sources</option>
           {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="inp h-9 text-xs w-auto">
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="inp" style={{ width:'auto' }}>
           <option value="created_at">Newest first</option>
           <option value="name">Name A–Z</option>
           <option value="status">By Status</option>
         </select>
       </div>
-      <div className="text-xs text-slate-400">{filtered.length} lead{filtered.length !== 1 ? 's' : ''}</div>
-      <div className="card overflow-hidden">
-        {filtered.length === 0 ? <EmptyState icon="📋" title="No leads match your filters"/> : (
+      <div style={{ fontSize:11.5, color:'var(--ink-3)' }}>{filtered.length} lead{filtered.length !== 1 ? 's' : ''}</div>
+      <div className="panel" style={{ overflow:'hidden' }}>
+        {filtered.length === 0 ? <EmptyState title="No leads match your filters"/> : (
           <table className="data-table">
             <thead><tr><th>Name</th><th className="hidden sm:table-cell">Phone</th><th>Status</th><th className="hidden md:table-cell">Score</th><th className="hidden md:table-cell">Source</th><th className="hidden lg:table-cell">Course</th><th className="hidden md:table-cell">Marketer</th><th className="hidden lg:table-cell">Date</th></tr></thead>
             <tbody>
               {filtered.map(l => (
                 <tr key={l.id} onClick={() => onSelect(l)}>
                   <td>
-                    <div className="flex items-center gap-2.5">
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                       <Avatar name={l.name} size={30}/>
                       <div>
-                        <div className="font-medium text-slate-900">{l.name}</div>
-                        <div className="flex gap-1 mt-0.5">
-                          {l.whatsapp_sent && <span className="text-[9px] text-emerald-500 font-semibold">WA ✓</span>}
-                          {l.source === 'personal' && <span className="text-[9px] text-violet-500 font-semibold">Personal</span>}
+                        <div style={{ fontWeight:500, color:'var(--ink)' }}>{l.name}</div>
+                        <div style={{ display:'flex', gap:5, marginTop:2 }}>
+                          {l.whatsapp_sent && <span style={{ fontSize:9, color:'var(--ok)', fontWeight:600 }}>WA ✓</span>}
+                          {l.source === 'personal' && <span style={{ fontSize:9, color:'var(--accent)', fontWeight:600 }}>Personal</span>}
                         </div>
                       </div>
                     </div>
                   </td>
-                  <td className="hidden sm:table-cell text-slate-500 text-xs">{l.phone}</td>
+                  <td className="hidden sm:table-cell" style={{ color:'var(--ink-2)', fontSize:12 }}>{l.phone}</td>
                   <td><Badge status={l.status}/></td>
                   <td className="hidden md:table-cell"><ScoreBadge score={leadScore(l)}/></td>
-                  <td className="hidden md:table-cell"><span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded capitalize">{l.source}</span></td>
-                  <td className="hidden lg:table-cell text-slate-500 text-xs max-w-[140px] truncate">{l.course_interest || '—'}</td>
+                  <td className="hidden md:table-cell"><span className="tag">{l.source}</span></td>
+                  <td className="hidden lg:table-cell" style={{ color:'var(--ink-2)', fontSize:12, maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.course_interest || '—'}</td>
                   <td className="hidden md:table-cell">
-                    {l.assignee ? <div className="flex items-center gap-1.5"><Avatar name={l.assignee.name} size={22}/><span className="text-xs text-slate-600">{l.assignee.name}</span></div> : <span className="text-xs text-slate-300">—</span>}
+                    {l.assignee
+                      ? <div style={{ display:'flex', alignItems:'center', gap:6 }}><Avatar name={l.assignee.name} size={22}/><span style={{ fontSize:12, color:'var(--ink-2)' }}>{l.assignee.name}</span></div>
+                      : <span style={{ fontSize:12, color:'var(--ink-3)' }}>—</span>}
                   </td>
-                  <td className="hidden lg:table-cell text-slate-400 text-xs">{timeAgo(l.created_at)}</td>
+                  <td className="hidden lg:table-cell" style={{ color:'var(--ink-3)', fontSize:11.5 }}>{timeAgo(l.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -631,44 +645,55 @@ function MyLeads({ leads, user, staff, onSelect, nav }) {
   const personalLeads = leads.filter(l => l.source === 'personal')
 
   return (
-    <div className="fade-up space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="fade-up" style={{ display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">My Leads</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Your assigned & personal leads + conversion stats</p>
+          <h1 style={{ fontSize:17, fontWeight:600, color:'var(--ink)', letterSpacing:'-.01em' }}>My Leads</h1>
+          <p style={{ fontSize:12.5, color:'var(--ink-3)', marginTop:2 }}>Your assigned &amp; personal leads + conversion stats</p>
         </div>
         <button onClick={() => nav('add_personal')} className="btn btn-primary">+ Personal Lead</button>
       </div>
 
       {/* My conversion stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:12 }}>
         <div className="stat-card"><div className="stat-value">{leads.length}</div><div className="stat-label">Total Assigned</div></div>
-        <div className="stat-card"><div className={`stat-value ${convRate >= 30 ? 'text-emerald-600' : convRate >= 15 ? 'text-amber-600' : 'text-red-500'}`}>{convRate}%</div><div className="stat-label">Overall Conversion</div></div>
-        <div className="stat-card"><div className="stat-value text-blue-600">{monthConv}%</div><div className="stat-label">This Month's Rate</div></div>
-        <div className="stat-card"><div className="stat-value text-violet-600">{personalLeads.length}</div><div className="stat-label">Personal Leads</div></div>
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: convRate >= 30 ? 'var(--ok)' : convRate >= 15 ? 'var(--warn)' : 'var(--bad)' }}>{convRate}%</div>
+          <div className="stat-label">Overall Conversion</div>
+        </div>
+        <div className="stat-card"><div className="stat-value" style={{ color:'var(--info)' }}>{monthConv}%</div><div className="stat-label">This Month's Rate</div></div>
+        <div className="stat-card"><div className="stat-value" style={{ color:'var(--accent)' }}>{personalLeads.length}</div><div className="stat-label">Personal Leads</div></div>
       </div>
 
-      {/* Registered leads = paid — their commission evidence */}
-      <div className="card overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+      {/* Registered leads */}
+      <div className="panel" style={{ overflow:'hidden' }}>
+        <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Registered (Paid) — {registered.length}</h2>
-            <p className="text-xs text-slate-400 mt-0.5">These leads have paid registration fees</p>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Registered (Paid) — {registered.length}</div>
+            <div style={{ fontSize:11.5, color:'var(--ink-3)', marginTop:2 }}>These leads have paid registration fees</div>
           </div>
         </div>
         {registered.length === 0 ? (
-          <EmptyState icon="🎓" title="No registrations yet" sub="Keep pushing — you're doing great!"/>
+          <EmptyState title="No registrations yet" sub="Keep pushing — you're doing great!"/>
         ) : (
           <table className="data-table">
             <thead><tr><th>Student</th><th>Course</th><th className="hidden sm:table-cell">Reg Fee</th><th className="hidden md:table-cell">Date</th><th>Source</th></tr></thead>
             <tbody>
               {registered.map(l => (
                 <tr key={l.id} onClick={() => onSelect(l)}>
-                  <td><div className="flex items-center gap-2.5"><Avatar name={l.name} size={30}/><div><div className="font-medium text-slate-900">{l.name}</div><div className="text-[10px] text-slate-400">{l.phone}</div></div></div></td>
-                  <td className="text-xs text-slate-600 max-w-[120px] truncate">{l.course_interest || '—'}</td>
-                  <td className="hidden sm:table-cell font-semibold text-emerald-600 text-sm">{l.reg_fee_paid ? fmtCurrency(l.reg_fee_paid) : '—'}</td>
-                  <td className="hidden md:table-cell text-xs text-slate-400">{fmtDate(l.reg_paid_at || l.updated_at)}</td>
-                  <td><span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded capitalize">{l.source}</span></td>
+                  <td>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <Avatar name={l.name} size={30}/>
+                      <div>
+                        <div style={{ fontWeight:500, color:'var(--ink)' }}>{l.name}</div>
+                        <div style={{ fontSize:10.5, color:'var(--ink-3)' }}>{l.phone}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td style={{ fontSize:12, color:'var(--ink-2)', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.course_interest || '—'}</td>
+                  <td className="hidden sm:table-cell" style={{ fontWeight:600, color:'var(--ok)', fontSize:13 }}>{l.reg_fee_paid ? fmtCurrency(l.reg_fee_paid) : '—'}</td>
+                  <td className="hidden md:table-cell" style={{ fontSize:12, color:'var(--ink-3)' }}>{fmtDate(l.reg_paid_at || l.updated_at)}</td>
+                  <td><span className="tag">{l.source}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -678,20 +703,24 @@ function MyLeads({ leads, user, staff, onSelect, nav }) {
 
       {/* Personal leads section */}
       {personalLeads.length > 0 && (
-        <div className="card overflow-hidden">
-          <div className="p-4 border-b border-slate-100">
-            <h2 className="text-sm font-bold text-slate-900">My Personal Leads — {personalLeads.length}</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Leads you sourced yourself</p>
+        <div className="panel" style={{ overflow:'hidden' }}>
+          <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--border)' }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>My Personal Leads — {personalLeads.length}</div>
+            <div style={{ fontSize:11.5, color:'var(--ink-3)', marginTop:2 }}>Leads you sourced yourself</div>
           </div>
-          <div className="divide-y divide-slate-50">
-            {personalLeads.map(l => (
-              <div key={l.id} onClick={() => onSelect(l)} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition">
-                <Avatar name={l.name} size={30}/>
-                <div className="flex-1 min-w-0"><div className="text-sm font-medium text-slate-900">{l.name}</div><div className="text-[11px] text-slate-400">{l.phone} · {l.course_interest || '—'}</div></div>
-                <Badge status={l.status}/>
+          {personalLeads.map(l => (
+            <div key={l.id} onClick={() => onSelect(l)}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 14px', borderBottom:'1px solid var(--border)', cursor:'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background='var(--row-hover)'}
+              onMouseLeave={e => e.currentTarget.style.background=''}>
+              <Avatar name={l.name} size={30}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12.5, fontWeight:500, color:'var(--ink)' }}>{l.name}</div>
+                <div style={{ fontSize:11, color:'var(--ink-3)' }}>{l.phone} · {l.course_interest || '—'}</div>
               </div>
-            ))}
-          </div>
+              <Badge status={l.status}/>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -714,21 +743,27 @@ function AddLead({ courses, onSubmit, onDone, isPM = false, personal = false }) 
   }
 
   return (
-    <div className="fade-up max-w-xl">
-      <h1 className="text-lg font-bold text-slate-900 mb-5">{personal ? '+ Add Personal Lead' : '+ Add New Lead'}</h1>
-      {personal && <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4 text-xs text-violet-700">This lead will be added as your personal lead — it will be assigned directly to you.</div>}
-      <div className="card p-5 space-y-4">
-        <div><Label>Full Name *</Label><input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Kwame Asante" className="inp"/></div>
-        <div className="grid grid-cols-2 gap-3">
+    <div className="fade-up" style={{ maxWidth:520 }}>
+      <h1 style={{ fontSize:16, fontWeight:600, color:'var(--ink)', marginBottom:16 }}>{personal ? '+ Add Personal Lead' : '+ Add New Lead'}</h1>
+      {personal && (
+        <div style={{ background:'var(--accent-wash)', border:'1px solid var(--border)', borderRadius:'var(--r)', padding:12, marginBottom:14, fontSize:12, color:'var(--accent-ink)' }}>
+          This lead will be added as your personal lead — it will be assigned directly to you.
+        </div>
+      )}
+      <div className="panel" style={{ padding:16, display:'flex', flexDirection:'column', gap:12 }}>
+        <div><Label required>Full Name</Label><input value={form.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Kwame Asante" className="inp"/></div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <div><Label>Phone</Label><input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="0244 000 000" type="tel" className="inp"/></div>
           <div><Label>Email</Label><input value={form.email} onChange={e => set('email', e.target.value)} placeholder="email@example.com" type="email" className="inp"/></div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          {!personal && <div><Label>Source</Label>
-            <select value={form.source} onChange={e => set('source', e.target.value)} className="inp">
-              {SOURCES.filter(s => s !== 'personal').map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-            </select>
-          </div>}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {!personal && (
+            <div><Label>Source</Label>
+              <select value={form.source} onChange={e => set('source', e.target.value)} className="inp">
+                {SOURCES.filter(s => s !== 'personal').map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+              </select>
+            </div>
+          )}
           <div><Label>City</Label><input value={form.city} onChange={e => set('city', e.target.value)} placeholder="Accra" className="inp"/></div>
         </div>
         <div><Label>Course Interest</Label>
@@ -737,7 +772,7 @@ function AddLead({ courses, onSubmit, onDone, isPM = false, personal = false }) 
             {courses.map(c => <option key={c.id} value={c.name}>{c.name} ({c.mode})</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3 items-end">
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, alignItems:'end' }}>
           <div><Label>Mode Preference</Label>
             <select value={form.mode_preference} onChange={e => set('mode_preference', e.target.value)} className="inp">
               <option value="">No preference</option>
@@ -746,13 +781,13 @@ function AddLead({ courses, onSubmit, onDone, isPM = false, personal = false }) 
               <option value="hybrid">Hybrid</option>
             </select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-600 pb-2 cursor-pointer">
-            <input type="checkbox" checked={form.scholarship_interest} onChange={e => set('scholarship_interest', e.target.checked)} className="w-4 h-4 accent-blue-600"/>
+          <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, color:'var(--ink-2)', paddingBottom:4, cursor:'pointer' }}>
+            <input type="checkbox" checked={form.scholarship_interest} onChange={e => set('scholarship_interest', e.target.checked)} style={{ width:14, height:14, accentColor:'var(--accent)' }}/>
             Needs scholarship
           </label>
         </div>
         <div><Label>Notes</Label><textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any additional notes…" className="inp" rows="3"/></div>
-        <button onClick={submit} disabled={!form.name.trim() || saving} className="btn btn-primary w-full press">
+        <button onClick={submit} disabled={!form.name.trim() || saving} className="btn btn-primary press" style={{ width:'100%' }}>
           {saving ? 'Adding…' : personal ? 'Add My Lead' : 'Add Lead'}
         </button>
       </div>
@@ -774,15 +809,15 @@ function StaffManager({ staff, sb, onRefresh }) {
   const del = async (id) => { if (!confirm('Deactivate this staff member?')) return; await sb.from('staff').update({ is_active: false }).eq('id', id); onRefresh() }
 
   return (
-    <div className="fade-up max-w-2xl">
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="text-lg font-bold text-slate-900">Staff ({staff.length})</h1>
+    <div className="fade-up" style={{ maxWidth:640 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+        <h1 style={{ fontSize:16, fontWeight:600, color:'var(--ink)' }}>Staff ({staff.length})</h1>
         <button onClick={() => setEditing({ name: '', email: '', phone: '', role: 'marketer', is_active: true })} className="btn btn-primary btn-sm">+ Add Staff</button>
       </div>
       {editing && (
         <Modal title={`${editing.id ? 'Edit' : 'New'} Staff`} onClose={() => setEditing(null)}>
-          <div className="space-y-3">
-            <div><Label>Full Name *</Label><input value={editing.name||''} onChange={e => setEditing({...editing,name:e.target.value})} className="inp"/></div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div><Label required>Full Name</Label><input value={editing.name||''} onChange={e => setEditing({...editing,name:e.target.value})} className="inp"/></div>
             <div><Label>Email</Label><input value={editing.email||''} onChange={e => setEditing({...editing,email:e.target.value})} type="email" className="inp"/></div>
             <div><Label>Phone</Label><input value={editing.phone||''} onChange={e => setEditing({...editing,phone:e.target.value})} type="tel" className="inp"/></div>
             <div><Label>Role</Label>
@@ -791,23 +826,23 @@ function StaffManager({ staff, sb, onRefresh }) {
               </select>
             </div>
           </div>
-          <div className="flex gap-2 mt-5">
-            <button onClick={save} disabled={!editing.name||saving} className="btn btn-primary flex-1">{saving?'Saving…':'Save'}</button>
-            <button onClick={() => setEditing(null)} className="btn btn-ghost flex-1">Cancel</button>
+          <div style={{ display:'flex', gap:8, marginTop:16 }}>
+            <button onClick={save} disabled={!editing.name||saving} className="btn btn-primary" style={{ flex:1 }}>{saving?'Saving…':'Save'}</button>
+            <button onClick={() => setEditing(null)} className="btn btn-ghost" style={{ flex:1 }}>Cancel</button>
           </div>
         </Modal>
       )}
-      <div className="card overflow-hidden">
-        {staff.length === 0 ? <EmptyState icon="👤" title="No staff yet"/> : (
+      <div className="panel" style={{ overflow:'hidden' }}>
+        {staff.length === 0 ? <EmptyState title="No staff yet"/> : (
           <table className="data-table">
             <thead><tr><th>Name</th><th>Role</th><th className="hidden sm:table-cell">Contact</th><th>Actions</th></tr></thead>
             <tbody>
               {staff.map(s => (
                 <tr key={s.id}>
-                  <td><div className="flex items-center gap-2.5"><Avatar name={s.name} size={32}/><span className="font-medium text-slate-900">{s.name}</span></div></td>
-                  <td><span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-2 py-1 rounded capitalize">{s.role}</span></td>
-                  <td className="hidden sm:table-cell text-xs text-slate-500">{s.email||s.phone||'—'}</td>
-                  <td><div className="flex gap-1.5"><button onClick={() => setEditing(s)} className="btn btn-ghost btn-sm">{Icon.edit}</button><button onClick={() => del(s.id)} className="btn btn-danger btn-sm">{Icon.trash}</button></div></td>
+                  <td><div style={{ display:'flex', alignItems:'center', gap:10 }}><Avatar name={s.name} size={30}/><span style={{ fontWeight:500, color:'var(--ink)' }}>{s.name}</span></div></td>
+                  <td><span className="tag">{s.role}</span></td>
+                  <td className="hidden sm:table-cell" style={{ fontSize:12, color:'var(--ink-2)' }}>{s.email||s.phone||'—'}</td>
+                  <td><div style={{ display:'flex', gap:6 }}><button onClick={() => setEditing(s)} className="btn btn-ghost btn-sm">{Icon.edit}</button><button onClick={() => del(s.id)} className="btn btn-danger btn-sm">{Icon.trash}</button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -832,17 +867,17 @@ function CourseManager({ courses, sb, onRefresh }) {
   const del = async (id) => { if (!confirm('Delete this course?')) return; await sb.from('courses').delete().eq('id', id); onRefresh() }
 
   return (
-    <div className="fade-up max-w-2xl">
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="text-lg font-bold text-slate-900">Courses ({courses.length})</h1>
+    <div className="fade-up" style={{ maxWidth:640 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+        <h1 style={{ fontSize:16, fontWeight:600, color:'var(--ink)' }}>Courses ({courses.length})</h1>
         <button onClick={() => setEditing({ name:'',description:'',mode:'in-person',duration:'',fee:0,reg_fee:150,scholarship_available:false,is_active:true })} className="btn btn-primary btn-sm">+ Add Course</button>
       </div>
       {editing && (
         <Modal title={`${editing.id ? 'Edit' : 'New'} Course`} onClose={() => setEditing(null)}>
-          <div className="space-y-3">
-            <div><Label>Course Name *</Label><input value={editing.name||''} onChange={e => setEditing({...editing,name:e.target.value})} className="inp"/></div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div><Label required>Course Name</Label><input value={editing.name||''} onChange={e => setEditing({...editing,name:e.target.value})} className="inp"/></div>
             <div><Label>Description</Label><textarea value={editing.description||''} onChange={e => setEditing({...editing,description:e.target.value})} className="inp" rows="2"/></div>
-            <div className="grid grid-cols-2 gap-3">
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <div><Label>Mode</Label>
                 <select value={editing.mode} onChange={e => setEditing({...editing,mode:e.target.value})} className="inp">
                   <option value="in-person">In-Person</option><option value="online">Online</option><option value="hybrid">Hybrid</option>
@@ -850,34 +885,37 @@ function CourseManager({ courses, sb, onRefresh }) {
               </div>
               <div><Label>Duration</Label><input value={editing.duration||''} onChange={e => setEditing({...editing,duration:e.target.value})} placeholder="e.g. 3 months" className="inp"/></div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <div><Label>Course Fee (GH₵)</Label><input type="number" value={editing.fee||''} onChange={e => setEditing({...editing,fee:Number(e.target.value)})} className="inp"/></div>
               <div><Label>Registration Fee (GH₵)</Label><input type="number" value={editing.reg_fee||150} onChange={e => setEditing({...editing,reg_fee:Number(e.target.value)})} className="inp"/></div>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-              <input type="checkbox" checked={editing.scholarship_available} onChange={e => setEditing({...editing,scholarship_available:e.target.checked})} className="accent-blue-600"/>
+            <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, color:'var(--ink-2)', cursor:'pointer' }}>
+              <input type="checkbox" checked={editing.scholarship_available} onChange={e => setEditing({...editing,scholarship_available:e.target.checked})} style={{ accentColor:'var(--accent)' }}/>
               Scholarship available
             </label>
           </div>
-          <div className="flex gap-2 mt-5">
-            <button onClick={save} disabled={!editing.name||saving} className="btn btn-primary flex-1">{saving?'Saving…':'Save'}</button>
-            <button onClick={() => setEditing(null)} className="btn btn-ghost flex-1">Cancel</button>
+          <div style={{ display:'flex', gap:8, marginTop:16 }}>
+            <button onClick={save} disabled={!editing.name||saving} className="btn btn-primary" style={{ flex:1 }}>{saving?'Saving…':'Save'}</button>
+            <button onClick={() => setEditing(null)} className="btn btn-ghost" style={{ flex:1 }}>Cancel</button>
           </div>
         </Modal>
       )}
-      <div className="card overflow-hidden">
-        {courses.length === 0 ? <EmptyState icon="📚" title="No courses yet"/> : (
+      <div className="panel" style={{ overflow:'hidden' }}>
+        {courses.length === 0 ? <EmptyState title="No courses yet"/> : (
           <table className="data-table">
             <thead><tr><th>Course</th><th>Mode</th><th className="hidden sm:table-cell">Duration</th><th>Course Fee</th><th>Reg. Fee</th><th>Actions</th></tr></thead>
             <tbody>
               {courses.map(c => (
                 <tr key={c.id}>
-                  <td><div className="font-medium text-slate-900">{c.name}</div>{c.scholarship_available && <div className="text-[10px] text-purple-500 font-semibold">🎓 Scholarship</div>}</td>
-                  <td><span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded capitalize">{c.mode}</span></td>
-                  <td className="hidden sm:table-cell text-xs text-slate-500">{c.duration||'—'}</td>
-                  <td className="font-semibold text-slate-900 text-sm">{fmtCurrency(c.fee)}</td>
-                  <td className="font-semibold text-blue-700 text-sm">{fmtCurrency(c.reg_fee||150)}</td>
-                  <td><div className="flex gap-1.5"><button onClick={() => setEditing(c)} className="btn btn-ghost btn-sm">{Icon.edit}</button><button onClick={() => del(c.id)} className="btn btn-danger btn-sm">{Icon.trash}</button></div></td>
+                  <td>
+                    <div style={{ fontWeight:500, color:'var(--ink)' }}>{c.name}</div>
+                    {c.scholarship_available && <div style={{ fontSize:10, color:'var(--accent)', fontWeight:600, marginTop:1 }}>Scholarship</div>}
+                  </td>
+                  <td><span className="tag">{c.mode}</span></td>
+                  <td className="hidden sm:table-cell" style={{ fontSize:12, color:'var(--ink-2)' }}>{c.duration||'—'}</td>
+                  <td style={{ fontWeight:600, color:'var(--ink)', fontSize:13 }}>{fmtCurrency(c.fee)}</td>
+                  <td style={{ fontWeight:600, color:'var(--info)', fontSize:13 }}>{fmtCurrency(c.reg_fee||150)}</td>
+                  <td><div style={{ display:'flex', gap:6 }}><button onClick={() => setEditing(c)} className="btn btn-ghost btn-sm">{Icon.edit}</button><button onClick={() => del(c.id)} className="btn btn-danger btn-sm">{Icon.trash}</button></div></td>
                 </tr>
               ))}
             </tbody>
@@ -916,51 +954,61 @@ function Integrations({ sb }) {
   const psWebhook = `${window.location.origin}/api/webhook/paystack`
 
   return (
-    <div className="fade-up max-w-2xl space-y-5">
-      <h1 className="text-lg font-bold text-slate-900">Integrations</h1>
+    <div className="fade-up" style={{ maxWidth:640, display:'flex', flexDirection:'column', gap:14 }}>
+      <h1 style={{ fontSize:16, fontWeight:600, color:'var(--ink)' }}>Integrations</h1>
 
       {/* Paystack */}
-      <div className="card p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-teal-600 rounded-xl flex items-center justify-center text-white text-sm font-bold">₵</div>
-          <div><div className="font-bold text-slate-900">Paystack Payments</div><div className="text-xs text-slate-400">Registration fee collection via Paystack</div></div>
-          <div className={`ml-auto badge ${import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+      <div className="panel" style={{ padding:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+          <div style={{ width:36, height:36, background:'#0f766e', borderRadius:'var(--r)', display:'grid', placeItems:'center', color:'#fff', fontWeight:700, fontSize:14, flexShrink:0 }}>₵</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Paystack Payments</div>
+            <div style={{ fontSize:11.5, color:'var(--ink-3)' }}>Registration fee collection via Paystack</div>
+          </div>
+          <span className="badge" style={{ marginLeft:'auto' }}>
+            <span className="dot" style={{ background: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ? 'var(--ok)' : 'var(--warn)' }}/>
             {import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ? 'Configured' : 'Needs Key'}
-          </div>
+          </span>
         </div>
-        <div className="space-y-3 text-xs text-slate-600">
-          <div className="bg-slate-50 rounded-xl p-4">
-            <div className="font-bold text-slate-800 mb-1">Paystack Webhook URL</div>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 font-mono text-[11px] truncate">{psWebhook}</code>
-              <button onClick={() => copyUrl(psWebhook,'ps')} className="btn btn-ghost btn-sm shrink-0">{copied==='ps' ? Icon.check : Icon.copy}</button>
+        <div style={{ display:'flex', flexDirection:'column', gap:10, fontSize:12 }}>
+          <div style={{ background:'var(--bg)', borderRadius:'var(--r)', padding:12 }}>
+            <div style={{ fontWeight:600, color:'var(--ink)', marginBottom:6 }}>Paystack Webhook URL</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <code style={{ flex:1, background:'var(--panel)', border:'1px solid var(--border)', borderRadius:4, padding:'4px 8px', fontFamily:'IBM Plex Mono,monospace', fontSize:10.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{psWebhook}</code>
+              <button onClick={() => copyUrl(psWebhook,'ps')} className="btn btn-ghost btn-sm" style={{ flexShrink:0 }}>{copied==='ps' ? Icon.check : Icon.copy}</button>
             </div>
-            <div className="text-slate-400 mt-1">Add this in Paystack Dashboard → Settings → Webhooks</div>
+            <div style={{ color:'var(--ink-3)', marginTop:4 }}>Add this in Paystack Dashboard → Settings → Webhooks</div>
           </div>
-          <div className="bg-blue-50 rounded-xl p-4 space-y-1">
-            <div className="font-bold text-blue-800">Setup:</div>
-            <div>1. Add <code>VITE_PAYSTACK_PUBLIC_KEY</code> to Vercel env vars</div>
-            <div>2. Add <code>PAYSTACK_SECRET_KEY</code> to Vercel env vars (server only)</div>
-            <div>3. Set registration fees per course in the Courses section</div>
-            <div>4. Add the webhook URL above in Paystack Dashboard</div>
+          <div style={{ background:'var(--accent-wash)', borderRadius:'var(--r)', padding:12, display:'flex', flexDirection:'column', gap:4 }}>
+            <div style={{ fontWeight:600, color:'var(--accent-ink)' }}>Setup:</div>
+            <div style={{ color:'var(--ink-2)' }}>1. Add <code>VITE_PAYSTACK_PUBLIC_KEY</code> to Vercel env vars</div>
+            <div style={{ color:'var(--ink-2)' }}>2. Add <code>PAYSTACK_SECRET_KEY</code> to Vercel env vars (server only)</div>
+            <div style={{ color:'var(--ink-2)' }}>3. Set registration fees per course in the Courses section</div>
+            <div style={{ color:'var(--ink-2)' }}>4. Add the webhook URL above in Paystack Dashboard</div>
           </div>
         </div>
       </div>
 
       {/* Facebook */}
-      <div className="card p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white">{Icon.fb}</div>
-          <div><div className="font-bold text-slate-900">Facebook Lead Ads</div><div className="text-xs text-slate-400">Auto-capture leads from Facebook ad forms</div></div>
-          <div className={`ml-auto badge ${fbConfig ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>{fbConfig ? 'Connected' : 'Not set up'}</div>
+      <div className="panel" style={{ padding:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
+          <div style={{ width:36, height:36, background:'#1d4ed8', borderRadius:'var(--r)', display:'grid', placeItems:'center', color:'#fff', flexShrink:0 }}>{Icon.fb}</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Facebook Lead Ads</div>
+            <div style={{ fontSize:11.5, color:'var(--ink-3)' }}>Auto-capture leads from Facebook ad forms</div>
+          </div>
+          <span className="badge" style={{ marginLeft:'auto' }}>
+            <span className="dot" style={{ background: fbConfig ? 'var(--ok)' : 'var(--muted)' }}/>
+            {fbConfig ? 'Connected' : 'Not set up'}
+          </span>
         </div>
         {loading ? <Spinner size={16}/> : (
-          <div className="space-y-3">
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="font-bold text-slate-800 text-xs mb-1">Webhook URL</div>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 font-mono text-[11px] truncate">{fbWebhook}</code>
-                <button onClick={() => copyUrl(fbWebhook,'fb')} className="btn btn-ghost btn-sm shrink-0">{copied==='fb' ? Icon.check : Icon.copy}</button>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ background:'var(--bg)', borderRadius:'var(--r)', padding:12 }}>
+              <div style={{ fontWeight:600, color:'var(--ink)', fontSize:12, marginBottom:6 }}>Webhook URL</div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <code style={{ flex:1, background:'var(--panel)', border:'1px solid var(--border)', borderRadius:4, padding:'4px 8px', fontFamily:'IBM Plex Mono,monospace', fontSize:10.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{fbWebhook}</code>
+                <button onClick={() => copyUrl(fbWebhook,'fb')} className="btn btn-ghost btn-sm" style={{ flexShrink:0 }}>{copied==='fb' ? Icon.check : Icon.copy}</button>
               </div>
             </div>
             <div><Label>Facebook Page ID</Label><input value={form.page_id||''} onChange={e => setForm({...form,page_id:e.target.value})} className="inp"/></div>
@@ -972,19 +1020,24 @@ function Integrations({ sb }) {
       </div>
 
       {/* Google Sheets */}
-      <div className="card p-5">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 bg-green-600 rounded-xl flex items-center justify-center text-white text-sm font-bold">G</div>
-          <div><div className="font-bold text-slate-900">Google Sheets Sync</div><div className="text-xs text-slate-400">Auto-log every registration to a shared sheet</div></div>
-          <div className="ml-auto badge bg-slate-100 text-slate-400">Via Webhook</div>
+      <div className="panel" style={{ padding:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
+          <div style={{ width:36, height:36, background:'#16a34a', borderRadius:'var(--r)', display:'grid', placeItems:'center', color:'#fff', fontWeight:700, fontSize:13, flexShrink:0 }}>G</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)' }}>Google Sheets Sync</div>
+            <div style={{ fontSize:11.5, color:'var(--ink-3)' }}>Auto-log every registration to a shared sheet</div>
+          </div>
+          <span className="badge" style={{ marginLeft:'auto' }}>
+            <span className="dot" style={{ background:'var(--muted)' }}/>Via Webhook
+          </span>
         </div>
-        <div className="bg-slate-50 rounded-xl p-4 text-xs text-slate-600 space-y-2">
-          <div className="font-bold text-slate-800">How to set up:</div>
+        <div style={{ background:'var(--bg)', borderRadius:'var(--r)', padding:12, fontSize:12, color:'var(--ink-2)', display:'flex', flexDirection:'column', gap:4 }}>
+          <div style={{ fontWeight:600, color:'var(--ink)' }}>How to set up:</div>
           <div>1. Open Google Sheets → Extensions → Apps Script</div>
           <div>2. Create a <code>doPost(e)</code> function that writes to your sheet</div>
           <div>3. Deploy as Web App → Anyone (with link) → Copy the URL</div>
           <div>4. Add <code>VITE_SHEETS_WEBHOOK_URL</code> to your Vercel environment</div>
-          <div>Every successful registration payment will POST the student data to your sheet automatically.</div>
+          <div style={{ color:'var(--ink-3)' }}>Every successful registration payment will POST student data to your sheet automatically.</div>
         </div>
       </div>
     </div>
