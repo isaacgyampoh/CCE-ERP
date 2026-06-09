@@ -1,44 +1,27 @@
-/**
- * CCE ERP — Paystack Webhook Handler
- * POST /api/webhook/paystack
- *
- * Events handled:
- *   charge.success  → confirm reg payment → trigger admission letter → notify all
- *   invoicepayment.success → confirm school fee payment → update invoice
- */
-
 import { createHmac } from 'crypto'
-import { createClient } from '@supabase/supabase-js'
-
-const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
-const APP_URL = process.env.APP_URL || 'https://cce-erp.vercel.app'
+import { sb, PAYSTACK_SECRET, APP_URL, SHEETS_URL } from '../_lib/config.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Verify signature
-  const secret = process.env.PAYSTACK_SECRET_KEY
-  const hash   = createHmac('sha512', secret).update(JSON.stringify(req.body)).digest('hex')
+  const hash = createHmac('sha512', PAYSTACK_SECRET).update(JSON.stringify(req.body)).digest('hex')
   if (hash !== req.headers['x-paystack-signature']) return res.status(401).json({ error: 'Invalid signature' })
 
   const { event, data } = req.body
 
-  // ── Registration Fee Payment ────────────────────────────────────────────
   if (event === 'charge.success') {
     const { reference, amount, metadata, customer } = data
-    const leadId      = metadata?.lead_id
-    const marketerId  = metadata?.marketer_id
-    const marketerName= metadata?.marketer_name || ''
-    const amountGHS   = amount / 100
+    const leadId       = metadata?.lead_id
+    const marketerId   = metadata?.marketer_id
+    const marketerName = metadata?.marketer_name || ''
+    const amountGHS    = amount / 100
 
     if (!leadId) return res.status(200).json({ ok: true })
 
-    // Load existing registration (may have been created on frontend)
     const { data: existingReg } = await sb.from('registrations').select('id').eq('lead_id', leadId).eq('status','paid').limit(1).single()
 
     let registrationId = existingReg?.id
 
-    // If no registration yet (payment came before form save — edge case), create minimal one
     if (!registrationId) {
       const { data: lead } = await sb.from('leads').select('*').eq('id', leadId).single()
       const { data: newReg } = await sb.from('registrations').insert({
@@ -49,24 +32,20 @@ export default async function handler(req, res) {
       }).select().single()
       registrationId = newReg?.id
     } else {
-      // Update existing
       await sb.from('registrations').update({ status: 'paid', payment_reference: reference, amount_paid: amountGHS, updated_at: new Date().toISOString() }).eq('id', registrationId)
     }
 
-    // Upsert payment record
     await sb.from('payments').upsert({
       lead_id: leadId, registration_id: registrationId,
       payment_type: 'registration', amount: amountGHS, reference, channel: 'paystack',
       status: 'success', paid_at: new Date().toISOString(),
     }, { onConflict: 'reference' })
 
-    // Update lead
     await sb.from('leads').update({
       status: 'registered', reg_fee_paid: amountGHS,
       reg_paid_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq('id', leadId)
 
-    // Log comment
     const { data: lead } = await sb.from('leads').select('name').eq('id', leadId).single()
     await sb.from('lead_comments').insert({
       lead_id: leadId, staff_id: marketerId, staff_name: marketerName,
@@ -74,7 +53,6 @@ export default async function handler(req, res) {
       status_change: 'registered',
     })
 
-    // AUTO-SEND ADMISSION LETTER
     if (registrationId) {
       try {
         await fetch(`${APP_URL}/api/admission/send-letter`, {
@@ -85,17 +63,14 @@ export default async function handler(req, res) {
       } catch(e) { console.error('Auto admission letter failed:', e) }
     }
 
-    // Google Sheets sync
-    const sheetsUrl = process.env.SHEETS_WEBHOOK_URL
-    if (sheetsUrl && lead) {
+    if (SHEETS_URL && lead) {
       try {
-        await fetch(sheetsUrl, { method: 'POST', headers: {'Content-Type':'application/json'},
+        await fetch(SHEETS_URL, { method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ timestamp: new Date().toISOString(), name: lead.name, reference, amount: amountGHS, marketer: marketerName, type: 'registration' })
         })
       } catch(e) {}
     }
 
-    // Notify relevant staff
     const { data: adminStaff } = await sb.from('staff').select('id').in('role', ['admission','admin','finance']).eq('is_active', true)
     const studentName = lead?.name || customer?.email
     for (const s of adminStaff || []) {
@@ -115,7 +90,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── School Fee Payment ──────────────────────────────────────────────────
   if (event === 'invoicepayment.success' || (event === 'charge.success' && data.metadata?.type === 'school_fee')) {
     const { reference, amount, metadata } = data
     const registrationId = metadata?.registration_id
@@ -123,7 +97,6 @@ export default async function handler(req, res) {
     const amountGHS      = amount / 100
 
     if (registrationId) {
-      // Load invoice
       const { data: invoice } = await sb.from('school_fee_invoices').select('*').eq('registration_id', registrationId).limit(1).single()
       if (invoice) {
         const newPaid    = Number(invoice.amount_paid) + amountGHS
@@ -134,13 +107,11 @@ export default async function handler(req, res) {
         if (leadId) await sb.from('leads').update({ school_fee_status: newStatus }).eq('id', leadId)
       }
 
-      // Record payment
       await sb.from('payments').upsert({
         lead_id: leadId || null, registration_id: registrationId, payment_type: 'school_fee',
         amount: amountGHS, reference, channel: 'paystack', status: 'success', paid_at: new Date().toISOString(),
       }, { onConflict: 'reference' })
 
-      // Notify finance
       const { data: finStaff } = await sb.from('staff').select('id').in('role',['finance','admin']).eq('is_active',true)
       for (const s of finStaff || []) {
         await sb.from('notifications').insert({

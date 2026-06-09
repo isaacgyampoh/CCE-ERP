@@ -1,26 +1,4 @@
-/**
- * CCE ERP — Unified Notification Sender
- * Single source of truth for all outbound messages.
- *
- * Usage:
- *   import { sendSMS, sendWA, sendEmail } from '../_lib/notify.js'
- *
- *   await sendSMS({ phone, message, leadId?, type? })
- *   await sendWA({ phone, message, leadId?, type? })
- *   await sendEmail({ toEmail, toName, subject, html, text?, attachments?, leadId?, type? })
- */
-
-import { createClient } from '@supabase/supabase-js'
-
-const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
-
-const ARKESEL_KEY  = process.env.ARKESEL_API_KEY
-const ARKESEL_FROM = 'Cambridge'
-const WABA_TOKEN    = process.env.WABA_TOKEN
-const WABA_PHONE_ID = process.env.WABA_PHONE_ID
-const SENDGRID_KEY  = process.env.SENDGRID_API_KEY
-const SENDGRID_FROM = process.env.SENDGRID_FROM_EMAIL || 'admissions@cambridgecoe.edu.gh'
-const SENDGRID_NAME = process.env.SENDGRID_FROM_NAME  || 'Cambridge Center of Excellence'
+import { sb, ARKESEL_KEY, ARKESEL_FROM, WABA_TOKEN, WABA_PHONE_ID, SENDGRID_KEY, SENDGRID_FROM, SENDGRID_NAME } from './config.js'
 
 export const cleanPhone = (p) => {
   if (!p) return ''
@@ -77,7 +55,6 @@ export async function sendWA({ phone, message, leadId = null, type = 'general' }
     }
   }
 
-  // No WABA — log as pending_manual so frontend can open wa.me
   await sb.from('whatsapp_log').insert({ lead_id: leadId, phone: to, message, marketer_name: 'System (Auto)', status: 'pending_manual' }).catch(() => {})
   return { ok: false, manual: true, waUrl: `https://wa.me/${to}?text=${encodeURIComponent(message)}` }
 }

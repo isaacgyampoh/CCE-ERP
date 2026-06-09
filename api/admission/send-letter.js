@@ -1,23 +1,5 @@
-/**
- * CCE ERP — Admission Letter Sender
- * POST /api/admission/send-letter
- *
- * Body: { registration_id, trigger: 'auto' | 'manual', sent_by_id }
- *
- * Sends via:
- *   1. Email (SendGrid) — if SENDGRID_API_KEY is set
- *   2. WhatsApp — logs the WA message + logs it; actual send
- *      happens via wa.me on the frontend OR via WhatsApp Business API
- *      if WABA_TOKEN is set.
- */
-
-import { createClient } from '@supabase/supabase-js'
+import { sb } from '../_lib/config.js'
 import { sendEmail, sendWA } from '../_lib/notify.js'
-
-const sb = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -25,7 +7,6 @@ export default async function handler(req, res) {
   const { registration_id, trigger = 'auto', sent_by_id } = req.body
   if (!registration_id) return res.status(400).json({ error: 'registration_id required' })
 
-  // Load registration + lead
   const { data: reg, error } = await sb
     .from('registrations')
     .select('*, lead:lead_id(*)')
@@ -42,9 +23,8 @@ export default async function handler(req, res) {
   const mode    = reg.mode_preference || student.mode_preference || ''
   const marketer = reg.marketer_name || 'our team'
 
-  // ── Generate letter content ─────────────────────────────────────────────
-  const today        = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-  const admissionNo  = `CCE-${Date.now().toString(36).toUpperCase().slice(-6)}`
+  const today       = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  const admissionNo = `CCE-${Date.now().toString(36).toUpperCase().slice(-6)}`
 
   const letterText = `
 CAMBRIDGE CENTER OF EXCELLENCE
@@ -147,7 +127,6 @@ Cambridge Center of Excellence
 
   const results = { email: false, whatsapp: false, errors: [] }
 
-  // ── 1. Send Email via SendGrid ──────────────────────────────────────────
   if (email) {
     const { ok, error: emailErr } = await sendEmail({
       toEmail: email, toName: name,
@@ -161,14 +140,12 @@ Cambridge Center of Excellence
     results.errors.push('Student email not on file')
   }
 
-  // ── 2. WhatsApp ─────────────────────────────────────────────────────────
   if (phone) {
     const { ok, manual, waUrl } = await sendWA({ phone, message: waMsg, leadId: reg.lead_id, type: 'admission' })
     results.whatsapp = ok
     if (manual) { results.whatsapp_message = waMsg; results.whatsapp_phone = phone; results.wa_url = waUrl }
   }
 
-  // ── 3. Update DB ────────────────────────────────────────────────────────
   await sb.from('registrations').update({
     notes: `Admission letter sent ${new Date().toISOString().slice(0,10)}. Email:${results.email?'✓':'✗'} WA:${results.whatsapp?'✓':'✗'}`,
     updated_at: new Date().toISOString(),
@@ -187,7 +164,6 @@ Cambridge Center of Excellence
     sent_by:      sent_by_id || null,
   })
 
-  // Notify the marketer
   if (reg.marketer_id) {
     await sb.from('notifications').insert({
       staff_id: reg.marketer_id,

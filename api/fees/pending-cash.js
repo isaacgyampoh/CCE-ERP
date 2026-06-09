@@ -1,15 +1,5 @@
-/**
- * CCE ERP — Cash Payment Request
- * POST /api/fees/pending-cash
- *
- * Student selects "Pay Cash" at the attendance page.
- * Creates a pending_cash transaction, notifies finance team + confirms to student.
- */
-
-import { createClient } from '@supabase/supabase-js'
+import { sb } from '../_lib/config.js'
 import { sendSMS } from '../_lib/notify.js'
-
-const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

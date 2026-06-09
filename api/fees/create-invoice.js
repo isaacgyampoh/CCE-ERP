@@ -1,24 +1,4 @@
-/**
- * CCE ERP — School Fee Invoice Generator
- * POST /api/fees/create-invoice
- *
- * Body: { registration_id, total_fee, due_date, notes, payment_plan, sent_by_id }
- *
- * Creates invoice, generates Paystack payment link, notifies student + accountant
- */
-
-import { createClient } from '@supabase/supabase-js'
-
-const sb = createClient(
-  process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-)
-
-const PAYSTACK_SECRET  = process.env.PAYSTACK_SECRET_KEY
-const SENDGRID_KEY     = process.env.SENDGRID_API_KEY
-const SENDGRID_FROM    = process.env.SENDGRID_FROM_EMAIL || 'accounts@cambridgecoe.edu.gh'
-const WABA_TOKEN       = process.env.WABA_TOKEN
-const WABA_PHONE_ID    = process.env.WABA_PHONE_ID
+import { sb, PAYSTACK_SECRET, SENDGRID_KEY, SENDGRID_FROM, WABA_TOKEN, WABA_PHONE_ID, APP_URL } from '../_lib/config.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -26,21 +6,19 @@ export default async function handler(req, res) {
   const { registration_id, total_fee, due_date, notes = '', sent_by_id } = req.body
   if (!registration_id || !total_fee) return res.status(400).json({ error: 'registration_id and total_fee required' })
 
-  // Load registration
   const { data: reg } = await sb.from('registrations').select('*, lead:lead_id(*)').eq('id', registration_id).single()
   if (!reg) return res.status(404).json({ error: 'Registration not found' })
 
-  const student     = reg.lead || {}
-  const name        = reg.full_name  || student.name
-  const email       = reg.email      || student.email
-  const phone       = reg.phone      || student.phone
-  const course      = reg.course_interest || student.course_interest
-  const marketer    = reg.marketer_name || ''
-  const invoiceRef  = `CCE-FEE-${Date.now().toString(36).toUpperCase().slice(-8)}`
+  const student    = reg.lead || {}
+  const name       = reg.full_name  || student.name
+  const email      = reg.email      || student.email
+  const phone      = reg.phone      || student.phone
+  const course     = reg.course_interest || student.course_interest
+  const marketer   = reg.marketer_name || ''
+  const invoiceRef = `CCE-FEE-${Date.now().toString(36).toUpperCase().slice(-8)}`
 
-  // ── Generate Paystack payment link ──────────────────────────────────────
-  let paystackLink  = null
-  let paystackCode  = null
+  let paystackLink = null
+  let paystackCode = null
 
   if (PAYSTACK_SECRET && email) {
     try {
@@ -66,12 +44,10 @@ export default async function handler(req, res) {
     } catch (e) { console.error('Paystack invoice error:', e) }
   }
 
-  // Fallback: generate a link manually (Paystack inline)
   if (!paystackLink) {
-    paystackLink = `${process.env.APP_URL || 'https://cce-erp.vercel.app'}/pay-fees?r=${registration_id}`
+    paystackLink = `${APP_URL}/pay-fees?r=${registration_id}`
   }
 
-  // ── Save invoice to DB ──────────────────────────────────────────────────
   const { data: invoice } = await sb.from('school_fee_invoices').insert({
     registration_id,
     lead_id:       reg.lead_id,
@@ -86,7 +62,6 @@ export default async function handler(req, res) {
     notes,
   }).select().single()
 
-  // Update registration
   await sb.from('registrations').update({
     school_fee_amount: total_fee,
     school_fee_status: 'pending',
@@ -96,7 +71,6 @@ export default async function handler(req, res) {
 
   await sb.from('leads').update({ school_fee_status: 'pending' }).eq('id', reg.lead_id)
 
-  // ── Compose messages ────────────────────────────────────────────────────
   const fmtGHS = (n) => `GH₵ ${Number(n).toLocaleString('en-GH', { minimumFractionDigits: 2 })}`
   const dueDateFmt = due_date ? new Date(due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'As soon as possible'
 
@@ -118,10 +92,9 @@ export default async function handler(req, res) {
   .footer { background: #f8fafc; padding: 16px 28px; font-size: 12px; color: #94a3b8; text-align: center; }
 </style></head><body>
 <div class="wrapper">
-  <div class="header"><h1>Tuition Fee Invoice 📋</h1><p style="margin:4px 0 0;opacity:.8;font-size:13px">Cambridge Center of Excellence</p></div>
+  <div class="header"><h1>Tuition Fee Invoice</h1><p style="margin:4px 0 0;opacity:.8;font-size:13px">Cambridge Center of Excellence</p></div>
   <div class="body">
     <p>Dear <strong>${name}</strong>,</p>
-    <p style="font-size:14px;color:#475569">Your tuition fee invoice for your enrolled programme is ready. Please make payment by the due date to secure your place.</p>
     <div class="invoice-box">
       <table>
         <tr><td>Invoice Ref.</td><td>${invoiceRef}</td></tr>
@@ -131,17 +104,15 @@ export default async function handler(req, res) {
         <tr class="total-row"><td>Amount Due</td><td style="color:#1d4ed8">${fmtGHS(total_fee)}</td></tr>
       </table>
     </div>
-    <a href="${paystackLink}" class="pay-btn">💳 Pay ${fmtGHS(total_fee)} Now</a>
-    <p style="font-size:13px;color:#94a3b8;text-align:center">Secure payment powered by Paystack. Payment plans available — contact us.</p>
+    <a href="${paystackLink}" class="pay-btn">Pay ${fmtGHS(total_fee)} Now</a>
   </div>
   <div class="footer">Cambridge Center of Excellence · Accra, Ghana<br>accounts@cambridgecoe.edu.gh</div>
 </div></body></html>`
 
-  const waMsg = `📋 *Cambridge Center of Excellence*\n*Tuition Fee Invoice*\n\nDear *${name}*,\n\nYour fee invoice is ready.\n\n📚 *Programme:* ${course}\n💰 *Amount Due:* ${fmtGHS(total_fee)}\n📅 *Due Date:* ${dueDateFmt}\n🔖 *Ref:* ${invoiceRef}\n\n👇 *Click to Pay Now:*\n${paystackLink}\n\nPayment plans are available. Reply here for assistance.\n\n_Accounts Office_\n_Cambridge Center of Excellence_`
+  const waMsg = `📋 *Cambridge Center of Excellence*\n*Tuition Fee Invoice*\n\nDear *${name}*,\n\nYour fee invoice is ready.\n\n📚 *Programme:* ${course}\n💰 *Amount Due:* ${fmtGHS(total_fee)}\n📅 *Due Date:* ${dueDateFmt}\n🔖 *Ref:* ${invoiceRef}\n\n👇 *Click to Pay Now:*\n${paystackLink}\n\n_Accounts Office_\n_Cambridge Center of Excellence_`
 
   const results = { email: false, whatsapp: false }
 
-  // ── Send Email ──────────────────────────────────────────────────────────
   if (SENDGRID_KEY && email) {
     try {
       const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -161,7 +132,6 @@ export default async function handler(req, res) {
     } catch (e) { console.error('Email error:', e) }
   }
 
-  // ── Send WhatsApp ───────────────────────────────────────────────────────
   if (WABA_TOKEN && WABA_PHONE_ID && phone) {
     try {
       const cleanPhone = phone.replace(/\s/g,'').replace(/^0/,'233').replace(/^\+/,'')
@@ -180,7 +150,6 @@ export default async function handler(req, res) {
     results.whatsapp_phone   = phone
   }
 
-  // Notify finance staff
   const { data: financeStaff } = await sb.from('staff').select('id').in('role', ['finance','admin']).eq('is_active', true)
   for (const s of financeStaff || []) {
     await sb.from('notifications').insert({

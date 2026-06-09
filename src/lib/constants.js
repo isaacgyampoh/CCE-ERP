@@ -1,5 +1,6 @@
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://PLACEHOLDER.supabase.co'
-export const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+export const SUPABASE_URL  = 'https://jlhgelmpuvlsaqtenxza.supabase.co'
+export const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsaGdlbG1wdXZsc2FxdGVueHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4Nzk0OTcsImV4cCI6MjA5NjQ1NTQ5N30.TUoXXOKBh-KEZYyH8s348nU-Gna9--I_gRSaAXB0M5o'
+export const PAYSTACK_PK   = 'pk_live_0c562178b2e71a90ecd8bd78d78310e159ea0f69'
 
 export const STATUS = {
   new:                  { label: 'New',               cls: 'bg-sky-50 text-sky-700',        dot: '#0ea5e9' },
@@ -16,18 +17,14 @@ export const STATUS = {
 export const SOURCES = ['facebook', 'linkedin', 'google_ads', 'instagram', 'website', 'manual', 'referral', 'walk-in', 'personal']
 export const ROLES   = ['marketer', 'pm', 'admin', 'finance', 'admission', 'receptionist']
 
-export const PAYSTACK_PK = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY || ''
-
 export const WA_ASSIGN_MSG = (leadName, marketerName, course = '') =>
   `Hi ${leadName.split(' ')[0]}! 👋\n\nThis is *Cambridge Center of Excellence*.\n\nThank you for your interest${course ? ` in *${course}*` : ' in our programs'}. 🎓\n\n*${marketerName.split(' ')[0]}* will be calling you shortly to explain more and walk you through the enrollment process.\n\nWe look forward to speaking with you!\n\n— Cambridge Center of Excellence`
 
 export const WA_REG_MSG = (leadName, regLink, marketerName) =>
   `Hello ${leadName}! 🎓\n\nGreat news — you're one step away from joining Cambridge Center of Excellence!\n\nPlease click the link below to complete your registration form and pay your registration fee:\n\n👉 ${regLink}\n\nOnce payment is confirmed, our Admissions team will reach out with your enrollment documents and course details.\n\nAny questions? I'm right here!\n\n${marketerName}\nCambridge Center of Excellence`
 
-// ─── Additional roles ─────────────────────────────────────────────────────────
 export const ALL_ROLES = ['marketer','pm','admin','finance','admission','receptionist','instructor']
 
-// ─── SMS / WhatsApp message templates ────────────────────────────────────────
 export const MSG_RSVP = (name, courseName, startDate, rsvpLink) =>
 `Hello ${name}! 👋
 

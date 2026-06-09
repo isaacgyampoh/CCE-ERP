@@ -1,17 +1,5 @@
-/**
- * CCE ERP — Send Document to Lead
- * POST /api/documents/send
- *
- * Sends a PDF from the Document Hub to a lead via Email (SendGrid) and/or WhatsApp link.
- * Called manually from the Documents page or auto-triggered by lead_created / payment_confirmed events.
- *
- * Body: { document_id, lead_id, channels: ['email','whatsapp'], context: { name, course, amount, receipt_no, balance }, sent_by? }
- */
-
-import { createClient } from '@supabase/supabase-js'
+import { sb } from '../_lib/config.js'
 import { sendEmail, sendWA } from '../_lib/notify.js'
-
-const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
 
 function buildBodyText({ doc, lead, ctx }) {
   const trigger = doc.trigger_event
@@ -118,7 +106,6 @@ export default async function handler(req, res) {
 
   const results = { ok: true, email_sent: false, wa_link: null }
 
-  // ── Email ─────────────────────────────────────────────────────────────────
   if (channels.includes('email') && lead.email) {
     let attachments = []
     try {
@@ -144,7 +131,6 @@ export default async function handler(req, res) {
     results.email_sent = emailOk
   }
 
-  // ── WhatsApp ──────────────────────────────────────────────────────────────
   if (channels.includes('whatsapp') && lead.phone) {
     const { ok, manual, waUrl } = await sendWA({
       phone: lead.phone,
@@ -155,7 +141,6 @@ export default async function handler(req, res) {
     if (manual) results.wa_link = waUrl
   }
 
-  // ── Track send ────────────────────────────────────────────────────────────
   await sb.from('document_sends').insert({
     document_id,
     lead_id,

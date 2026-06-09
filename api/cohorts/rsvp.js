@@ -1,11 +1,4 @@
-/**
- * CCE ERP — RSVP Handler
- * POST /api/cohorts/rsvp
- * Body: { token, response: 'yes' | 'no' }
- */
-
-import { createClient } from '@supabase/supabase-js'
-const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+import { sb } from '../_lib/config.js'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -19,7 +12,6 @@ export default async function handler(req, res) {
   const status = response === 'yes' ? 'confirmed' : 'declined'
   await sb.from('enrolments').update({ rsvp_status: status, rsvp_responded_at: new Date().toISOString() }).eq('id', enr.id)
 
-  // Notify PM/admin
   const { data: pms } = await sb.from('staff').select('id').in('role', ['pm','admin','instructor']).eq('is_active', true)
   for (const pm of pms || []) {
     await sb.from('notifications').insert({

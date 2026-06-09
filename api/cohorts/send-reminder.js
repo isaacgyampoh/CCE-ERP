@@ -1,24 +1,9 @@
-/**
- * CCE ERP — Class Reminder Scheduler
- * POST /api/cohorts/send-reminder
- *
- * Body: { cohort_id, reminder_type: '1month'|'1week'|'2day'|'rsvp' }
- *
- * Also callable as a cron job via Vercel Cron:
- *   GET /api/cohorts/send-reminder?cron=true
- *   (runs daily, checks which cohorts need reminders sent)
- */
-
-import { createClient } from '@supabase/supabase-js'
+import { sb, APP_URL } from '../_lib/config.js'
 import { sendSMS, sendWA } from '../_lib/notify.js'
-
-const sb = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
-const APP_URL = process.env.APP_URL || 'https://cce-erp.vercel.app'
 
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'
 
 export default async function handler(req, res) {
-  // ── Cron mode: auto-check all cohorts ────────────────────────────────────
   if (req.method === 'GET' && req.query.cron === 'true') {
     const now = new Date()
     const { data: cohorts } = await sb.from('cohorts')
@@ -44,7 +29,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, total_sent: totalSent })
   }
 
-  // ── Manual trigger ────────────────────────────────────────────────────────
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { cohort_id, reminder_type } = req.body
@@ -67,7 +51,6 @@ async function sendReminderForCohort(cohortId, reminderType) {
   }
   const sentField = fieldMap[reminderType]
 
-  // Get enrolments that haven't received this reminder yet
   let query = sb.from('enrolments').select('*').eq('cohort_id', cohortId).eq('rsvp_status', 'confirmed')
   if (sentField) query = query.eq(sentField, false)
   const { data: enrolments } = await query
@@ -96,7 +79,6 @@ async function sendReminderForCohort(cohortId, reminderType) {
 
     if (!message) continue
 
-    // Send WA + SMS
     const smsMsg = message.replace(/\*/g, '').replace(/\n/g, ' ').replace(/👉/g, '').trim()
 
     if (enr.student_phone) {
@@ -104,12 +86,10 @@ async function sendReminderForCohort(cohortId, reminderType) {
       await sendSMS({ phone: enr.student_phone, message: smsMsg.slice(0, 160), leadId: enr.lead_id, type: 'reminder' })
     }
 
-    // Mark as sent
     if (sentField) {
       await sb.from('enrolments').update({ [sentField]: true }).eq('id', enr.id)
     }
 
-    // Notify system
     await sb.from('notifications').insert({
       staff_id: cohort.instructor_id || null,
       title: `Reminder sent: ${reminderType}`,
