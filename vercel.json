@@ -15,23 +15,17 @@
     }
   ],
 
-  "build": {
-    "env": {
-      "VITE_SUPABASE_URL":        "https://jlhgelmpuvlsaqtenxza.supabase.co",
-      "VITE_SUPABASE_ANON_KEY":   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsaGdlbG1wdXZsc2FxdGVueHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4Nzk0OTcsImV4cCI6MjA5NjQ1NTQ5N30.TUoXXOKBh-KEZYyH8s348nU-Gna9--I_gRSaAXB0M5o",
-      "VITE_PAYSTACK_PUBLIC_KEY":  "pk_live_0c562178b2e71a90ecd8bd78d78310e159ea0f69",
-      "VITE_ARKESEL_API_KEY":      "VXliSENVQnpsYkhWYlNpZkNRZEc"
-    }
-  },
-
   "env": {
-    "VITE_SUPABASE_URL":    "https://jlhgelmpuvlsaqtenxza.supabase.co",
-    "SUPABASE_SERVICE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsaGdlbG1wdXZsc2FxdGVueHphIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDg3OTQ5NywiZXhwIjoyMDk2NDU1NDk3fQ.E6eCj5ko_iOvlfQuYYJDCi4MG4onL07FIKOe0dh4_GA",
-    "PAYSTACK_SECRET_KEY":  "sk_live_da0342b5a5c7dca2ecaf3c60e1ee5c5d695b8780",
-    "ARKESEL_API_KEY":      "VXliSENVQnpsYkhWYlNpZkNRZEc",
-    "SENDGRID_FROM_EMAIL":  "admissions@cambridgecoe.edu.gh",
-    "SENDGRID_FROM_NAME":   "Cambridge Center of Excellence",
-    "APP_URL":              "https://cce-erp.vercel.app",
-    "NODE_ENV":             "production"
+    "VITE_SUPABASE_URL":       "https://jlhgelmpuvlsaqtenxza.supabase.co",
+    "VITE_SUPABASE_ANON_KEY":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsaGdlbG1wdXZsc2FxdGVueHphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4Nzk0OTcsImV4cCI6MjA5NjQ1NTQ5N30.TUoXXOKBh-KEZYyH8s348nU-Gna9--I_gRSaAXB0M5o",
+    "VITE_PAYSTACK_PUBLIC_KEY": "pk_live_0c562178b2e71a90ecd8bd78d78310e159ea0f69",
+    "VITE_ARKESEL_API_KEY":     "VXliSENVQnpsYkhWYlNpZkNRZEc",
+    "SUPABASE_SERVICE_KEY":     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsaGdlbG1wdXZsc2FxdGVueHphIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDg3OTQ5NywiZXhwIjoyMDk2NDU1NDk3fQ.E6eCj5ko_iOvlfQuYYJDCi4MG4onL07FIKOe0dh4_GA",
+    "PAYSTACK_SECRET_KEY":      "sk_live_da0342b5a5c7dca2ecaf3c60e1ee5c5d695b8780",
+    "ARKESEL_API_KEY":          "VXliSENVQnpsYkhWYlNpZkNRZEc",
+    "SENDGRID_FROM_EMAIL":      "admissions@cambridgecoe.edu.gh",
+    "SENDGRID_FROM_NAME":       "Cambridge Center of Excellence",
+    "APP_URL":                  "https://cce-erp.vercel.app",
+    "NODE_ENV":                 "production"
   }
 }
